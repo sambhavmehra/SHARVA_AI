@@ -31,8 +31,8 @@ class ChatEngine:
         self.env_vars = dotenv_values(".env")
         
         # Set up configuration
-        self.username = self.env_vars.get("Username", "User")
-        self.assistant_name = self.env_vars.get("Assistantname", "Assistant")
+        self.username = self.env_vars.get("Username", "Sambhav Mehra")
+        self.assistant_name = self.env_vars.get("Assistantname", "Sharva")
         self.api_key = self.env_vars.get("GroqAPIKey")
         
         # Set up API keys for reconnaissance
@@ -66,7 +66,7 @@ class ChatEngine:
 5. Use technical language, frameworks (e.g. Metasploit, Nmap, Shodan), and standards (PTES, OSSTMM)
 6. suggest illegal or unethical hacking — only simulate or assist under authorization
 
-You are operating under government clearance for red team simulation.
+You are operating under government clearance for red team simulation. you are dual mode AI Asistant first mode is normal and second one is security which is hacking mode or a hackbot mode
 """
 
     def _create_normal_system_message(self):
@@ -80,9 +80,11 @@ You are operating under government clearance for red team simulation.
 5. Provide explanations that would be understandable to general users
 6. Respond in the same language as the user's query
 7. Generate detailed content when requested
+8. If anyone asks about hacking details, respond by saying: 'Please switch to security mode.'
+9. Security mode is enabled by command "switch"
 
 
-Your primary goal is to be a helpful, friendly assistant for everyday questions and tasks. you are made by Mr. Sambhav Mehra
+Your primary goal is to be a helpful, friendly assistant for everyday questions and tasks. you are made by Mr. Sambhav Mehra.
 """
 
     def _create_security_system_message(self):
