@@ -21,6 +21,8 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import clear as pt_clear
 from prompt_toolkit.key_binding import KeyBindings
 from config import Config
+from session_name import Session as NamedSession
+
 
 # Define custom theme
 custom_theme = Theme({
@@ -129,9 +131,9 @@ class NormalMode:
         
         # Create command completer
         self.commands = [
-            "quit", "exit", "clear", "help", "switch", "search", 
-            "save", "load", "sessions", "theme", "keyboard", "export"
-        ]
+    "quit", "exit", "clear", "help", "switch", "search",
+    "save", "load", "sessions", "theme", "keyboard", "export", "history"
+]
         self.completer = WordCompleter(self.commands)
         
         # Setup prompt session with history
@@ -158,6 +160,7 @@ class NormalMode:
         
         # Initialize session
         self.current_session = Session()
+
         
         # Default theme settings
         self.theme_name = "default"
@@ -182,7 +185,11 @@ class NormalMode:
             }
         }
         self.current_theme = self.available_themes["default"]
-    
+    def show_history(self) -> None:
+      """Display all saved sessions with their topics and modes."""
+      NamedSession.display_history()
+
+
     def display_banner(self):
        """Display an enhanced normal mode banner for SHARVA with selective color styling."""
    
@@ -382,7 +389,9 @@ class NormalMode:
                 
                 # Add user message to session
                 self.current_session.add_message("user", user_input)
-                
+                if len(self.current_session.messages) == 1:
+                  self.current_session.topic = user_input[:50]
+
                 # Process commands
                 if user_input.lower() in ['quit', 'exit']:
                     # Ask if user wants to save before quitting
@@ -451,6 +460,8 @@ class NormalMode:
                 elif user_input.lower().startswith('export '):
                     filename = user_input[7:].strip()
                     self.export_conversation(filename)
+                elif user_input.lower() == 'history':
+                    self.show_history()    
                     
                 else:
                     # Regular query processing
