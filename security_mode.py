@@ -16,6 +16,8 @@ from datetime import datetime
 import random
 import shutil
 from hackbot import HackBot
+from session import Session
+
 
 console = Console()
 
@@ -31,6 +33,8 @@ class SecurityMode:
         self.auth_level = "standard"  # Authorization level
         self.session_id = f"SID-{random.randint(100000, 999999)}"
         self.hackbot = None
+        self.current_session = Session()
+
 
         # Import here to avoid circular imports
         from chat_engine import ChatEngine
@@ -112,6 +116,11 @@ class SecurityMode:
         commands_table.add_row("stats", "Show session statistics", "ALL")
         commands_table.add_row("switch", "Switch to normal mode", "ALL")
         commands_table.add_row("quit/exit", "Terminate application", "ALL")
+        commands_table.add_row("save", "Save current session", "ALL")
+        commands_table.add_row("load <id>", "Load a saved session", "ALL")
+        commands_table.add_row("sessions", "List all saved sessions", "ALL")
+
+        
         
         # Configuration commands
         commands_table.add_row("set_level <level>", "Set security level (standard/advanced/expert)", "ALL")
@@ -279,7 +288,34 @@ class SecurityMode:
                 console.print(Text.from_markup("[bold yellow][blink]! WARNING: EXPERT MODE ENABLED ![/blink][/bold yellow]"))
         else:
             console.print(f"[bold red][!] ERROR:[/bold red] Invalid level. Choose from: {', '.join(valid_levels)}")
+    def save_session(self):
+      self.current_session.save()
+      console.print(f"[bold green]✓ Session saved with ID: {self.current_session.session_id}[/bold green]")
 
+    def load_session(self, session_id: str):
+      try:
+          self.current_session = Session.load(session_id)
+          console.print(f"[bold green]✓ Session {session_id} loaded[/bold green]")
+      except Exception as e:
+          console.print(f"[bold red]✗ Failed to load session: {e}[/bold red]")
+
+    def list_sessions(self):
+      sessions = Session.list_sessions()
+      if not sessions:
+        console.print("[bold yellow]No saved sessions found.[/bold yellow]")
+        return
+      table = Table(title="Saved Sessions", box=box.SIMPLE)
+      table.add_column("Session ID", style="cyan")
+      table.add_column("Last Updated", style="green")
+      table.add_column("Messages", style="magenta")
+      for session in sessions:
+        table.add_row(
+            session["session_id"],
+            session["last_updated"].strftime("%Y-%m-%d %H:%M:%S"),
+            str(session["message_count"])
+        )
+      console.print(table)
+      
     def set_security_mode(self, mode):
         """Set the security mode (defensive/offensive)."""
         valid_modes = ["defensive", "offensive"]
@@ -526,6 +562,10 @@ class SecurityMode:
             
             # Process the actual query while showing the animation
             response = self.chat_engine.process_security_query(enhanced_query)
+            
+            self.current_session.add_message("user", query)
+            self.current_session.add_message("assistant", response)
+
             
             # Complete the progress bars
             for i, task in enumerate(tasks):
@@ -1141,18 +1181,37 @@ class SecurityMode:
         console.print("[bold green]✓ Offensive capabilities enabled successfully[/bold green]")
                         
     def run(self):
-        """Main method to run the security mode."""
-        self.display_banner()
-       
-        self.setup_tab_completion()
-        
-        while True:
-            try:
-                # More hacker-style prompt
-                cmd = Prompt.ask(f"\n[bold red][{self.security_mode}@{self.config.username}][/bold red][bold yellow]$[/bold yellow]")
-                
-                if cmd.lower() in ['exit', 'quit']:
-                    # Dramatic exit
+      """Main method to run the security mode."""
+      self.display_banner()
+      self.setup_tab_completion()
+
+      while True:
+        try:
+            # More hacker-style prompt
+            cmd = Prompt.ask(f"\n[bold red][{self.security_mode}@{self.config.username}][/bold red][bold yellow]$[/bold yellow]")
+
+            if cmd.lower() in ['exit', 'quit']:
+                # Ask if the user really wants to exit
+                confirm_exit = Confirm.ask(
+                    "[bold yellow]Are you sure you want to exit the security mode? (y/n)[/bold yellow]",
+                    default="n"
+                )
+
+                if confirm_exit:
+                    # If there are messages, ask if they want to save the session
+                    if len(self.current_session.messages) > 0:
+                        try:
+                            confirm_save = Prompt.ask(
+                                "[bold yellow]Do you want to save the session before exiting? (y/n)[/bold yellow]",
+                                choices=["y", "n"],
+                                default="y"
+                            )
+                            if confirm_save.lower() == "y":
+                                self.save_session()
+                                
+                        except Exception as e:
+                            console.print(f"[bold red]Error during session save: {e}")
+
                     console.print("\n[bold red]Terminating secure session...[/bold red]")
                     with Progress(
                         SpinnerColumn("dots", style="red"),
@@ -1162,89 +1221,100 @@ class SecurityMode:
                         task = progress.add_task("[red]Wiping session data...", total=1)
                         time.sleep(1)
                         progress.update(task, advance=1)
-                    
+
                     console.print(f"[bold green]Session terminated. Duration: {datetime.now() - self.session_start}[/bold green]")
                     break
-                    
-                elif cmd.lower() == 'help':
-                    self.show_help()
-                    
-                elif cmd.lower() == 'clear':
-                    self.clear_screen()
-                    
-                elif cmd.lower() == 'stats':
-                    self.show_stats()
-                    
-                elif cmd.lower() == 'switch':
-                    console.print("[bold green]Switching to normal chat mode...[/bold green]")
-                    return 'normal'
-                    
-                elif cmd.lower().startswith('set_level '):
-                    level = cmd.split(' ')[1]
-                    self.set_security_level(level)
-                    
-                elif cmd.lower().startswith('set_mode '):
-                    mode = cmd.split(' ')[1]
-                    self.set_security_mode(mode)
-                    
-                elif cmd.lower().startswith('set_auth '):
-                    auth = cmd.split(' ')[1]
-                    self.set_auth_level(auth)
-                    
-                elif cmd.lower() == 'static_code_analysis':
-                    self.static_code_analysis()
-                    
-                elif cmd.lower() == 'vuln_analysis':
-                    self.vulnerability_analysis()
-                    
-                elif cmd.lower().startswith('threat_hunt'):
-                    parts = cmd.split(' ', 1)
-                    log_file = parts[1] if len(parts) > 1 else None
-                    self.threat_hunt(log_file)
-                    
-                elif cmd.lower().startswith('malware_analysis'):
-                    parts = cmd.split(' ', 1)
-                    file_path = parts[1] if len(parts) > 1 else None
-                    self.malware_analysis(file_path)
-                    
-                elif cmd.lower().startswith('recon'):
-                    parts = cmd.split(' ', 1)
-                    target = parts[1] if len(parts) > 1 else None
-                    self.recon(target)
-                    
-                elif cmd.lower().startswith('pentest_report'):
-                    parts = cmd.split(' ', 1)
-                    scope = parts[1] if len(parts) > 1 else None
-                    self.pentest_report(scope)
-                    
-                elif cmd.lower().startswith('exploit_analysis'):
-                    parts = cmd.split(' ', 1)
-                    cve = parts[1] if len(parts) > 1 else None
-                    self.exploit_analysis(cve)
-                    
-                elif cmd.lower().startswith('payload_gen'):
-                    parts = cmd.split(' ', 1)
-                    platform = parts[1] if len(parts) > 1 else None
-                    self.payload_gen(platform)
-                
-                elif cmd.lower() == 'run_hackbot':
-                    if self.security_mode != "offensive":
-                        console.print("[bold red]Error: Must be in offensive mode to run HackBot[/bold red]")
-                        console.print("[yellow]Use 'set_mode offensive' first[/yellow]")
-                    else:
-                        if self.auth_level not in ["government", "certified"]:
-                            console.print("[bold red]Error: Insufficient authorization level[/bold red]")
-                            console.print("[yellow]Elevate auth level with 'set_auth government'[/yellow]")
-                        else:
-                            self.run_hackbot()
-                    
                 else:
-                    # Process as security query
-                    self.process_security_query(cmd)
-                    
-                    
-            except KeyboardInterrupt:
-                console.print("\n[bold yellow]Operation aborted. Type 'exit' to quit.[/bold yellow]")
-                
-            except Exception as e:
-                console.print(f"[bold red][!] ERROR:[/bold red] {str(e)}")
+                    console.print("[bold yellow]Exit canceled. Returning to prompt.[/bold yellow]")
+
+            elif cmd.lower() == 'help':
+                self.show_help()
+
+            elif cmd.lower() == 'save':
+                self.save_session()
+
+            elif cmd.lower().startswith('load '):
+                session_id = cmd[5:].strip()
+                self.load_session(session_id)
+
+            elif cmd.lower() == 'sessions':
+                self.list_sessions()
+
+            elif cmd.lower() == 'clear':
+                self.clear_screen()
+
+            elif cmd.lower() == 'stats':
+                self.show_stats()
+
+            elif cmd.lower() == 'switch':
+                console.print("[bold green]Switching to normal chat mode...[/bold green]")
+                return 'normal'
+
+            elif cmd.lower().startswith('set_level '):
+                level = cmd.split(' ')[1]
+                self.set_security_level(level)
+
+            elif cmd.lower().startswith('set_mode '):
+                mode = cmd.split(' ')[1]
+                self.set_security_mode(mode)
+
+            elif cmd.lower().startswith('set_auth '):
+                auth = cmd.split(' ')[1]
+                self.set_auth_level(auth)
+
+            elif cmd.lower() == 'static_code_analysis':
+                self.static_code_analysis()
+
+            elif cmd.lower() == 'vuln_analysis':
+                self.vulnerability_analysis()
+
+            elif cmd.lower().startswith('threat_hunt'):
+                parts = cmd.split(' ', 1)
+                log_file = parts[1] if len(parts) > 1 else None
+                self.threat_hunt(log_file)
+
+            elif cmd.lower().startswith('malware_analysis'):
+                parts = cmd.split(' ', 1)
+                file_path = parts[1] if len(parts) > 1 else None
+                self.malware_analysis(file_path)
+
+            elif cmd.lower().startswith('recon'):
+                parts = cmd.split(' ', 1)
+                target = parts[1] if len(parts) > 1 else None
+                self.recon(target)
+
+            elif cmd.lower().startswith('pentest_report'):
+                parts = cmd.split(' ', 1)
+                scope = parts[1] if len(parts) > 1 else None
+                self.pentest_report(scope)
+
+            elif cmd.lower().startswith('exploit_analysis'):
+                parts = cmd.split(' ', 1)
+                cve = parts[1] if len(parts) > 1 else None
+                self.exploit_analysis(cve)
+
+            elif cmd.lower().startswith('payload_gen'):
+                parts = cmd.split(' ', 1)
+                platform = parts[1] if len(parts) > 1 else None
+                self.payload_gen(platform)
+
+            elif cmd.lower() == 'run_hackbot':
+                if self.security_mode != "offensive":
+                    console.print("[bold red]Error: Must be in offensive mode to run HackBot[/bold red]")
+                    console.print("[yellow]Use 'set_mode offensive' first[/yellow]")
+                else:
+                    if self.auth_level not in ["government", "certified"]:
+                        console.print("[bold red]Error: Insufficient authorization level[/bold red]")
+                        console.print("[yellow]Elevate auth level with 'set_auth government'[/yellow]")
+                    else:
+                        self.run_hackbot()
+
+            else:
+                # Process as security query
+                self.process_security_query(cmd)
+
+        except KeyboardInterrupt:
+            console.print("\n[bold yellow]Operation aborted. Type 'exit' to quit.[/bold yellow]")
+
+        except Exception as e:
+            console.print(f"[bold red][!] ERROR:[/bold red] {str(e)}")
