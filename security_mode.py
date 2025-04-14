@@ -17,7 +17,7 @@ import random
 import shutil
 from hackbot import HackBot
 from session import Session
-
+from session_name import Session
 
 console = Console()
 
@@ -410,14 +410,14 @@ class SecurityMode:
         """Set up tab completion for commands."""
         import readline
         commands = [
-        'help', 'clear', 'stats', 'switch', 'exit', 'quit',
-        'set_level standard', 'set_level advanced', 'set_level expert',
-        'set_mode defensive', 'set_mode offensive',
-        'set_auth standard', 'set_auth government', 'set_auth certified',
-        'vuln_analysis', 'static_code_analysis', 'threat_hunt',
-        'malware_analysis', 'recon', 'pentest_report',
-        'exploit_analysis', 'payload_gen', 'show_threat_map'
-    ]
+    'help', 'clear', 'stats', 'switch', 'exit', 'quit',
+    'set_level standard', 'set_level advanced', 'set_level expert',
+    'set_mode defensive', 'set_mode offensive',
+    'set_auth standard', 'set_auth government', 'set_auth certified',
+    'vuln_analysis', 'static_code_analysis', 'threat_hunt',
+    'malware_analysis', 'recon', 'pentest_report',
+    'exploit_analysis', 'payload_gen', 'show_threat_map', 'history'
+]
         def completer(text, state):
             options = [cmd for cmd in commands if cmd.startswith(text)]
             if state < len(options):
@@ -528,7 +528,10 @@ class SecurityMode:
         # Actually clear the screen
         os.system('cls' if os.name == 'nt' else 'clear')
         self.display_banner()
-
+    def show_history(self) -> None:
+      """Display all saved sessions with their topics and modes in security mode."""
+      Session.display_history()
+    
     def process_security_query(self, query):
         """Process security query with enhanced feedback."""
         self.query_count += 1
@@ -565,6 +568,9 @@ class SecurityMode:
             
             self.current_session.add_message("user", query)
             self.current_session.add_message("assistant", response)
+            if len(self.current_session.messages) == 1:
+               self.current_session.topic = query[:50]
+
 
             
             # Complete the progress bars
@@ -1297,7 +1303,9 @@ class SecurityMode:
                 parts = cmd.split(' ', 1)
                 platform = parts[1] if len(parts) > 1 else None
                 self.payload_gen(platform)
-
+            elif cmd.lower() == 'history':
+                self.show_history()
+                
             elif cmd.lower() == 'run_hackbot':
                 if self.security_mode != "offensive":
                     console.print("[bold red]Error: Must be in offensive mode to run HackBot[/bold red]")
