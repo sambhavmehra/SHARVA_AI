@@ -192,6 +192,7 @@ class SecurityMode:
             commands_table.add_row("run_hackbot", "Run HackBot cybersecurity assistant", "GOV+")
             commands_table.add_row("osint", "To get information about person", "GOV+")
             
+            
         # Topics based on current mode with more technical details
         if self.security_mode == "defensive":
             topics = Text.from_markup("""
@@ -755,113 +756,113 @@ class SecurityMode:
                           box=box.HEAVY_EDGE))
 
     def threat_hunt(self, log_file=None):
-        """Threat hunting in log files."""
-        if not log_file:
-            log_file = Prompt.ask("[bold green]>[/bold green] Log File Path")
+      """Threat hunting in log files."""
+      if not log_file:
+        log_file = Prompt.ask("[bold green]>[/bold green] Log File Path")
+    
+      console.print(Text.from_markup("\n[bold red]==== THREAT HUNTING ENGINE ====[/bold red]"))
+    
+    # Animated threat hunting process
+      console.print("\n[bold yellow]Initiating threat hunting procedure...[/bold yellow]")
+    
+      with Progress(
+        SpinnerColumn("dots", style="red"),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=50, style="red", complete_style="green"),
+        expand=False
+      ) as progress:
+         tasks = []
         
-        console.print(Text.from_markup("\n[bold red]==== THREAT HUNTING ENGINE ====[/bold red]"))
+         steps = [
+            "Loading log data...",
+            "Analyzing log patterns...",
+            "Detecting anomalies...",
+            "Correlating threat indicators...",
+            "Identifying potential compromises...",
+            "Generating threat report..."
+        ]
         
-        # Animated threat hunting process
-        console.print("\n[bold yellow]Initiating threat hunting procedure...[/bold yellow]")
+         for step in steps:
+            task = progress.add_task(f"[red]{step}", total=1)
+            tasks.append(task)
         
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Loading log data...",
-                "Analyzing log patterns...",
-                "Detecting anomalies...",
-                "Correlating threat indicators...",
-                "Identifying potential compromises...",
-                "Generating threat report..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the logs
-            result = self.chat_engine.threat_hunt(log_file)
-            
-            # Complete the progress bars with slight delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
+        # Process the logs
+         result = self.chat_engine.threat_hunt(log_file)
+        
+        # Complete the progress bars with slight delays
+         for i, task in enumerate(tasks):
+            time.sleep(0.3)
+            progress.update(task, advance=1)
 
-        # Create a timeline of suspicious events
-        console.print("\n[bold red]╔═══ THREAT HUNTING RESULTS ════════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Log Source:[/bold cyan] {os.path.basename(log_file)}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Hunt Timestamp:[/bold cyan] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Analysis Mode:[/bold cyan] {self.security_level.upper()}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        # Display results
-        console.print(Markdown(result))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
+    # Create a timeline of suspicious events
+      console.print("\n[bold red]╔═══ THREAT HUNTING RESULTS ════════════════════════╗[/bold red]")
+      console.print(f"[bold red]║[/bold red] [bold cyan]Log Source:[/bold cyan] {os.path.basename(log_file)}")
+      console.print(f"[bold red]║[/bold red] [bold cyan]Hunt Timestamp:[/bold cyan] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+      console.print(f"[bold red]║[/bold red] [bold cyan]Analysis Mode:[/bold cyan] {self.security_level.upper()}")
+      console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
+    
+    # Display results
+      console.print(Markdown(result))
+      console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
 
     def malware_analysis(self, file_path=None):
-        """Analyze potential malware samples."""
-        if not file_path:
-            file_path = Prompt.ask("[bold green]>[/bold green] File Path")
+      """Analyze potential malware samples."""
+      if not file_path:
+        file_path = Prompt.ask("[bold green]>[/bold green] File Path")
+    
+    # Check for sufficient security level
+      if self.security_level not in ["advanced", "expert"]:
+        console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
+        console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
+        return
+    
+      console.print(Text.from_markup("\n[bold red]==== MALWARE ANALYSIS ENGINE ====[/bold red]"))
+      console.print(Text.from_markup("[bold yellow][blink]! CAUTION: SANDBOXED ENVIRONMENT REQUIRED ![/blink][/bold yellow]"))
+    
+    # More dramatic animation for malware analysis
+      console.print("\n[bold red]Initializing secure analysis environment...[/bold red]")
+    
+      with Progress(
+        SpinnerColumn("dots", style="red"),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=50, style="red", complete_style="green"),
+        expand=False
+      ) as progress:
+          tasks = []
         
-        # Check for sufficient security level
-        if self.security_level not in ["advanced", "expert"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
-            console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
-            return
+          steps = [
+            "Initializing sandbox...",
+            "Scanning file for known signatures...",
+            "Performing static analysis...",
+            "Running dynamic analysis...",
+            "Monitoring behavior...",
+            "Extracting IOCs...",
+            "Generating malware profile..."
+        ]
         
-        console.print(Text.from_markup("\n[bold red]==== MALWARE ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow][blink]! CAUTION: SANDBOXED ENVIRONMENT REQUIRED ![/blink][/bold yellow]"))
+          for step in steps:
+            task = progress.add_task(f"[red]{step}", total=1)
+            tasks.append(task)
         
-        # More dramatic animation for malware analysis
-        console.print("\n[bold red]Initializing secure analysis environment...[/bold red]")
+        # Process the malware analysis
+          result = self.chat_engine.analyze_malware(file_path)
         
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Initializing sandbox...",
-                "Scanning file for known signatures...",
-                "Performing static analysis...",
-                "Running dynamic analysis...",
-                "Monitoring behavior...",
-                "Extracting IOCs...",
-                "Generating malware profile..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the malware analysis
-            result = self.chat_engine.analyze_malware(file_path)
-            
-            # Complete the progress bars with slightly longer delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.4)  # Longer delay for dramatic effect
-                progress.update(task, advance=1)
+        # Complete the progress bars with slightly longer delays
+          for i, task in enumerate(tasks):
+            time.sleep(0.4)  # Longer delay for dramatic effect
+            progress.update(task, advance=1)
 
-        # Display results with cyberpunk aesthetics
-        console.print("\n[bold red]╔═══ MALWARE ANALYSIS REPORT ═══════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Sample:[/bold cyan] {os.path.basename(file_path)}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]MD5:[/bold cyan] {self._generate_hash()[:32]}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]SHA256:[/bold cyan] {self._generate_hash()}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        # Create a structured view of malware details
-        console.print(Markdown(result))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-
+    # Display results with cyberpunk aesthetics
+      console.print("\n[bold red]╔═══ MALWARE ANALYSIS REPORT ═══════════════════════╗[/bold red]")
+      console.print(f"[bold red]║[/bold red] [bold cyan]Sample:[/bold cyan] {os.path.basename(file_path)}")
+      console.print(f"[bold red]║[/bold red] [bold cyan]MD5:[/bold cyan] {self._generate_hash()[:32]}")
+      console.print(f"[bold red]║[/bold red] [bold cyan]SHA256:[/bold cyan] {self._generate_hash()}")
+      console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
+    
+    # Create a structured view of malware details
+      console.print(Markdown(result))
+      console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
+      
     # Offensive security methods - only available in offensive mode
     def recon(self, target=None):
       """Advanced passive reconnaissance engine (OSINT) with threat modeling."""
@@ -999,65 +1000,65 @@ class SecurityMode:
         console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
 
     def exploit_analysis(self, cve=None):
-        """Analyze exploit for CVE."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not cve:
-            cve = Prompt.ask("[bold green]>[/bold green] CVE ID (e.g., CVE-2021-44228)")
+      """Analyze exploit for CVE."""
+      if self.security_mode != "offensive":
+        console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        return
         
-        # Check for sufficient security level
-        if self.security_level not in ["advanced", "expert"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
-            console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
-            return
+      if not cve:
+        cve = Prompt.ask("[bold green]>[/bold green] CVE ID (e.g., CVE-2021-44228)")
+    
+    # Check for sufficient security level
+      if self.security_level not in ["advanced", "expert"]:
+        console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
+        console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
+        return
+    
+      console.print(Text.from_markup("\n[bold red]==== EXPLOIT ANALYSIS ENGINE ====[/bold red]"))
+      console.print(Text.from_markup("[bold yellow]NOTICE: AUTHORIZED USE ONLY[/bold yellow]"))
+    
+    # Animation for exploit analysis
+      console.print("\n[bold cyan]Analyzing exploit capabilities...[/bold cyan]")
+    
+      with Progress(
+        SpinnerColumn("dots", style="cyan"),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=50, style="cyan", complete_style="green"),
+        expand=False
+      ) as progress:
+         tasks = []
         
-        console.print(Text.from_markup("\n[bold red]==== EXPLOIT ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow]NOTICE: AUTHORIZED USE ONLY[/bold yellow]"))
+         steps = [
+            "Querying vulnerability databases...",
+            "Retrieving exploit details...",
+            "Analyzing exploit techniques...",
+            "Assessing exploit reliability...",
+            "Identifying target systems...",
+            "Compiling analysis report..."
+        ]
         
-        # Animation for exploit analysis
-        console.print("\n[bold cyan]Analyzing exploit capabilities...[/bold cyan]")
+         for step in steps:
+            task = progress.add_task(f"[cyan]{step}", total=1)
+            tasks.append(task)
         
-        with Progress(
-            SpinnerColumn("dots", style="cyan"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="cyan", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Querying vulnerability databases...",
-                "Retrieving exploit details...",
-                "Analyzing exploit techniques...",
-                "Assessing exploit reliability...",
-                "Identifying target systems...",
-                "Compiling analysis report..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[cyan]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the exploit analysis
-            result = self.chat_engine.analyze_exploit(cve)
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
+        # Process the exploit analysis
+         result = self.chat_engine.analyze_exploit(cve)
+        
+        # Complete the progress bars
+         for i, task in enumerate(tasks):
+            time.sleep(0.3)
+            progress.update(task, advance=1)
 
-        # Display results
-        console.print("\n[bold cyan]╔═══ EXPLOIT ANALYSIS REPORT ════════════════════════╗[/bold cyan]")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]CVE ID:[/bold white] {cve}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Analysis Level:[/bold white] {self.security_level.upper()}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
-        console.print("[bold cyan]╠═══════════════════════════════════════════════════╣[/bold cyan]")
-        
-        console.print(Markdown(result))
-        console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
+    # Display results
+      console.print("\n[bold cyan]╔═══ EXPLOIT ANALYSIS REPORT ════════════════════════╗[/bold cyan]")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]CVE ID:[/bold white] {cve}")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Analysis Level:[/bold white] {self.security_level.upper()}")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+      console.print("[bold cyan]╠═══════════════════════════════════════════════════╣[/bold cyan]")
+    
+      console.print(Markdown(result))
+      console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
 
     def display_matrix_effect(self, duration=3):
         """Display a brief Matrix-style digital rain animation."""
@@ -1116,88 +1117,89 @@ class SecurityMode:
             self.play_terminal_bell()
             
     def payload_gen(self, platform=None):
-        """Generate test payload for platform."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not platform:
-            platform = Prompt.ask("[bold green]>[/bold green] Platform (windows/linux/web/android)")
+      """Generate test payload for platform."""
+      if self.security_mode != "offensive":
+        console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        return
         
-        # Check for sufficient security level and auth level
-        if self.auth_level != "government":
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level. Government clearance required.")
-            console.print("[bold yellow]Use 'set_auth government' to enable this feature.[/bold yellow]")
-            return
-            
-        console.print(Text.from_markup("\n[bold red]==== TEST PAYLOAD GENERATOR ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow][blink]! RESTRICTED OPERATION - GOVERNMENT CLEARANCE REQUIRED ![/blink][/bold yellow]"))
+      if not platform:
+        platform = Prompt.ask("[bold green]>[/bold green] Platform (windows/linux/web/android)")
+    
+    # Check for sufficient security level and auth level
+      if self.auth_level != "government":
+        console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level. Government clearance required.")
+        console.print("[bold yellow]Use 'set_auth government' to enable this feature.[/bold yellow]")
+        return
         
-        # Get additional information
-        payload_type = Prompt.ask("[bold green]>[/bold green] Payload Type (reverse_shell/bind_shell/web/etc)")
-        purpose = Prompt.ask("[bold green]>[/bold green] Test Purpose")
+      console.print(Text.from_markup("\n[bold red]==== TEST PAYLOAD GENERATOR ====[/bold red]"))
+      console.print(Text.from_markup("[bold yellow][blink]! RESTRICTED OPERATION - GOVERNMENT CLEARANCE REQUIRED ![/blink][/bold yellow]"))
+    
+    # Get additional information
+      payload_type = Prompt.ask("[bold green]>[/bold green] Payload Type (reverse_shell/bind_shell/web/etc)")
+      purpose = Prompt.ask("[bold green]>[/bold green] Test Purpose")
+    
+    # Confirm operation with dramatic warning
+      console.print(Panel(
+        "[bold yellow]PAYLOAD GENERATION WARNING[/bold yellow]\n" +
+        "[bold white]This operation will generate test security payloads for:[/bold white]\n" +
+        f"- Platform: {platform}\n" +
+        f"- Type: {payload_type}\n" +
+        f"- Purpose: {purpose}\n\n" +
+        "[bold red]ALL OPERATIONS ARE LOGGED FOR COMPLIANCE[/bold red]",
+        title="[bold red][ SECURITY DIRECTIVE ][/bold red]",
+        border_style="red", box=box.HEAVY_EDGE
+    ))
+    
+      confirm = Confirm.ask("[bold red]Confirm payload generation[/bold red]")
+      if not confirm:
+        console.print("[bold yellow]Operation aborted.[/bold yellow]")
+        return
+    
+    # Animation for payload generation
+      console.print("\n[bold red]Generating security test payload...[/bold red]")
+    
+      with Progress(
+        SpinnerColumn("dots", style="red"),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=50, style="red", complete_style="green"),
+        expand=False
+      ) as progress:
+        tasks = []
         
-        # Confirm operation with dramatic warning
-        console.print(Panel(
-            "[bold yellow]PAYLOAD GENERATION WARNING[/bold yellow]\n" +
-            "[bold white]This operation will generate test security payloads for:[/bold white]\n" +
-            f"- Platform: {platform}\n" +
-            f"- Type: {payload_type}\n" +
-            f"- Purpose: {purpose}\n\n" +
-            "[bold red]ALL OPERATIONS ARE LOGGED FOR COMPLIANCE[/bold red]",
-            title="[bold red][ SECURITY DIRECTIVE ][/bold red]",
-            border_style="red", box=box.HEAVY_EDGE
-        ))
+        steps = [
+            "Setting up payload environment...",
+            "Creating payload structure...",
+            "Implementing functionality...",
+            "Encoding payload...",
+            "Signing with test certificate...",
+            "Finalizing payload..."
+        ]
+         
+        for step in steps:
+            task = progress.add_task(f"[red]{step}", total=1)
+            tasks.append(task)
         
-        confirm = Confirm.ask("[bold red]Confirm payload generation[/bold red]")
-        if not confirm:
-            console.print("[bold yellow]Operation aborted.[/bold yellow]")
-            return
+        # Generate the payload
+      result = self.chat_engine.generate_test_payload(platform, payload_type, purpose)
         
-        # Animation for payload generation
-        console.print("\n[bold red]Generating security test payload...[/bold red]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Setting up payload environment...",
-                "Creating payload structure...",
-                "Implementing functionality...",
-                "Encoding payload...",
-                "Signing with test certificate...",
-                "Finalizing payload..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Generate the payload
-            result = self.chat_engine.generate_test_payload(platform, payload_type, purpose)
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.4)
-                progress.update(task, advance=1)
+        # Complete the progress bars
+      for i, task in enumerate(tasks):
+            time.sleep(0.4)
+            progress.update(task, advance=1)
 
-        # Display results
-        console.print("\n[bold red]╔═══ TEST PAYLOAD DETAILS ═══════════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold white]Platform:[/bold white] {platform.upper()}")
-        console.print(f"[bold red]║[/bold red] [bold white]Type:[/bold white] {payload_type}")
-        console.print(f"[bold red]║[/bold red] [bold white]Auth Level:[/bold white] GOVERNMENT")
-        console.print(f"[bold red]║[/bold red] [bold white]Hash:[/bold white] {self._generate_hash()[:16]}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
+    # Display results
+      console.print("\n[bold red]╔═══ TEST PAYLOAD DETAILS ═══════════════════════════╗[/bold red]")
+      console.print(f"[bold red]║[/bold red] [bold white]Platform:[/bold white] {platform.upper()}")
+      console.print(f"[bold red]║[/bold red] [bold white]Type:[/bold white] {payload_type}")
+      console.print(f"[bold red]║[/bold red] [bold white]Auth Level:[/bold white] GOVERNMENT")
+      console.print(f"[bold red]║[/bold red] [bold white]Hash:[/bold white] {self._generate_hash()[:16]}")
+      console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
+    
+      console.print(Syntax(result, "python", theme="monokai", line_numbers=True))
+      console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
+      console.print("\n[bold yellow]WARNING: This payload is for authorized security testing only.[/bold yellow]")
         
-        console.print(Syntax(result, "python", theme="monokai", line_numbers=True))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-        console.print("\n[bold yellow]WARNING: This payload is for authorized security testing only.[/bold yellow]")
     def run_hackbot(self):
         """Run HackBot in offensive security mode."""
         if self.security_mode != "offensive":
