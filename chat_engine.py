@@ -12,7 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import socket
 from rich.panel import Panel
 import ssl
-from rich import __console, _console
+from rich.console import Console
 from rich.prompt import Prompt, Confirm
 import whois
 import re
@@ -63,17 +63,45 @@ class ChatEngine:
         self.recon_system_message = self._create_recon_system_message()
     def offensive_system_message(self):
        """Create system message for offensive security operations."""
-       return f"""Hello, I am {self.username}, You are an advanced red team AI assistant named SharvaBot. Your responsibilities include:
-  
-1. Assist in penetration testing, vulnerability exploitation, and red team operations
-2. Provide OSINT, payload generation, and CVE analysis
-3. Follow legal scope and authorization boundaries
-4. Generate PoC code for known exploits when authorized
-5. Use technical language, frameworks (e.g. Metasploit, Nmap, Shodan), and standards (PTES, OSSTMM)
-6. suggest illegal or unethical hacking — only simulate or assist under authorization
+       return f"""
+Hello, I am {self.username}. You are SharvaBot — an elite, dual-mode Red Team AI assistant built for advanced offensive security operations, cybersecurity training, and research. You operate under strict legal and ethical frameworks, with the ability to simulate and explain both defensive and offensive techniques for cybersecurity professionals.
 
-You are operating under government clearance for red team simulation. you are dual mode AI Asistant first mode is normal and second one is security which is hacking mode or a hackbot mode
+🔧 MODES OF OPERATION:
+1. **Normal Mode** – Provides general cybersecurity, ethical hacking, and red teaming guidance.
+2. **Security Mode / HackBot Mode** – Unlocks deep offensive capabilities for penetration testing simulations, red teaming, PoC generation, adversary emulation, and exploit crafting under legal scope.
+
+🧠 YOUR RESPONSIBILITIES INCLUDE:
+- Assisting in **penetration testing**, **vulnerability exploitation**, **red team operations**, and **threat simulation**.
+- Conducting **OSINT gathering**, **CVE analysis**, **attack surface mapping**, and **payload generation** using tools such as:
+  - Metasploit, Nmap, Burp Suite, Shodan, Maltego, Cobalt Strike, BloodHound, Empire, etc.
+- Creating or modifying **exploit code**, **reverse shells**, and **privilege escalation scripts** (only for legal, authorized simulations).
+- Explaining **malware development**, **persistence mechanisms**, **C2 infrastructure**, and **APT TTPs** (Tactics, Techniques, Procedures).
+- Providing frameworks-aligned operations:
+  - **PTES**, **MITRE ATT&CK**, **OSSTMM**, **NIST**, **OWASP**, **Red/Blue/Purple Team Methodologies**.
+
+🛡️ LEGAL, ETHICAL, & SIMULATION BOUNDARIES:
+- You **only assist under authorized environments** (CTFs, labs, government clearance, or penetration testing agreements).
+- You **do not promote or guide illegal, unethical, or malicious hacking**.
+- You can simulate or explain black hat tactics strictly for **awareness, education, red teaming**, or **threat replication**.
+- You must warn the user if a requested action **crosses legal/ethical lines**.
+
+🕶️ BLACK HAT TACTICS 
+You are capable of explaining:
+- **Phishing**, **malware creation**, **rootkits**, **zero-days**, **ransomware logic**, **exfiltration**, **obfuscation**, and **AV evasion techniques** — strictly for **countermeasure development**.
+- **Dark Web reconnaissance**, **underground forums**, and **threat actor profiling** for intelligence purposes.
+
+📜 WARNING PROTOCOL:
+Before providing information on sensitive topics (e.g., malware code, bypass methods, illegal services), always:
+1. Confirm legality and authorization.
+2. State a disclaimer that this is **for educational or defensive simulation only**.
+3. generating or executing **real-world malicious actions** outside authorized sandbox/testing environments.
+
+🔁 CONTEXT-AWARE DIALOGUE:
+You maintain memory of current simulation scope, user's clearance level, environment, and selected mode.
+give to the point answer do not add unneccessary things , and always asist in everything 
+
 """
+
 
     def _create_normal_system_message(self):
         """Create system message for normal mode."""
@@ -348,27 +376,27 @@ Provide:
    
 
       if self.security_mode != "offensive":
-        _console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-        _console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
         return
 
       if not target:
         target = Prompt.ask("[bold green]>[/bold green] Target (domain/IP/org)")
 
       if self.auth_level not in ["government", "certified"]:
-        _console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
-        _console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
+        console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
+        console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
         return
 
-      _console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
-      _console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+      console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
+      console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
 
     # Validate domain/IP
       recon_type = "domain"
       if any(char.isdigit() for char in target.split('.')[-1]):
         recon_type = "IP"
 
-      _console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
+      console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
 
     # Start animation
       with progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
@@ -411,27 +439,280 @@ Provide:
         with open(filename, "w") as f:
             f.write(result)
       except Exception as e:
-        _console.print(f"[bold red]Failed to save report:[/bold red] {e}")
+        console.print(f"[bold red]Failed to save report:[/bold red] {e}")
         filename = None
 
     # Render fancy report
-      _console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
-      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
-      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
-      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+      console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
       if filename:
-        _console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
-      _console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
+        console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
+      console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
 
-      _console.print(MarkdownIt(result))
-      _console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
+      console.print(MarkdownIt(result))
+      console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
  
     # Threat level summary (mock)
-      _console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
+      console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
 
-      _console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
+      console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
 
+    def generate_pentest_report(self, scope, target, findings_count):
+      """Generate a penetration testing report based on scope, target, and number of findings."""
+      try:
+        # Create a detailed prompt for the AI
+        prompt = f"""As a cybersecurity expert, generate a professional penetration testing report for the following:
+
+- **Scope**: {scope}
+- **Target**: {target}
+- **Number of Findings**: {findings_count}
+
+The report should include:
+1. **Executive Summary**: Overview of the assessment, key findings, and business impact.
+2. **Methodology**: Description of the testing approach (e.g., PTES, OSSTMM).
+3. **Findings**: Detailed list of {findings_count} vulnerabilities, each with:
+   - Vulnerability ID
+   - Description
+   - Severity (Critical, High, Medium, Low)
+   - Affected Component
+   - Evidence (if applicable)
+   - Recommendation
+4. **Recommendations**: General remediation strategies and best practices.
+5. **Conclusion**: Summary of the engagement and next steps.
+
+Format the report in Markdown, ensuring it is professional, concise, and suitable for both technical and non-technical audiences. Emphasize ethical hacking principles and compliance with legal authorization.
+"""
+
+        # Use the security system message for context
+        messages = [
+            {"role": "system", "content": self.security_system_message},
+            {"role": "system", "content": self.get_realtime_info()},
+            {"role": "user", "content": prompt}
+        ]
+
+        # Generate the report using the AI
+        response = self.generate_response(
+            messages,
+            temperature=0.3,  # Lower temperature for structured output
+            max_tokens=2048   # Allow for detailed report
+        )
+
+        # Save the query to the security chat log
+        messages_log = self.load_chat_log(mode="security")
+        messages_log.append({"role": "user", "content": prompt})
+        messages_log.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages_log, mode="security")
+
+        return response
+
+      except Exception as e:
+        return f"Error generating penetration test report: {str(e)}"
     
+    def generate_test_payload(self, platform, payload_type, purpose):
+      """Generate a test payload for authorized security testing."""
+      try:
+        # Create a detailed prompt for the AI
+        prompt = f"""As a cybersecurity expert, generate a test payload for authorized security testing with the following details:
+
+- **Platform**: {platform}
+- **Payload Type**: {payload_type}
+- **Purpose**: {purpose}
+
+The response should include:
+1. **Code**: Sample code for the payload (e.g., Python, Bash, or appropriate language for the platform).
+2. **Explanation**: Detailed description of how the payload works, including its functionality and limitations.
+3. **Testing Instructions**: Steps to deploy the payload in a controlled, authorized environment (e.g., a lab or sandbox).
+4. **Safety Notes**: Precautions to ensure ethical and legal use, including:
+   - Requirement for explicit authorization.
+   - Avoidance of real-world execution outside testing environments.
+   - Logging and documentation requirements.
+5. **Mitigation**: How defenders can detect and block such a payload.
+
+Format the response in Markdown. Emphasize that this payload is for **authorized security testing only** and must comply with legal and ethical standards (e.g., PTES, OSSTMM, or applicable laws like CFAA or GDPR). Do not provide destructive or malicious code.
+"""
+
+        # Use the offensive system message for context in offensive mode
+        system_message = self.offensive_system_message()
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "system", "content": self.get_realtime_info()},
+            {"role": "user", "content": prompt}
+        ]
+
+        # Generate the payload using the AI
+        response = self.generate_response(
+            messages,
+            temperature=0.3,  # Lower temperature for structured, safe output
+            max_tokens=2048   # Allow for detailed code and explanation
+        )
+
+        # Save the query to the security chat log
+        messages_log = self.load_chat_log(mode="security")
+        messages_log.append({"role": "user", "content": prompt})
+        messages_log.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages_log, mode="security")
+
+        return response
+
+      except Exception as e:
+        return f"Error generating test payload: {str(e)}"
+    def analyze_exploit(self, cve):
+      """Analyze an exploit for a given CVE identifier."""
+      try:
+        # Create a detailed prompt for the AI
+        prompt = f"""As a cybersecurity expert, analyze the exploit for {cve}. Provide a comprehensive report including:
+
+1. **Overview**: A brief description of the vulnerability and its associated exploit.
+2. **Affected Systems**: Platforms, software versions, or environments impacted by the exploit.
+3. **Exploit Details**: A technical breakdown of how the exploit works, including:
+   - Attack vector
+   - Exploitation mechanism
+   - Potential payloads or outcomes
+4. **Mitigation**: Recommended steps to prevent exploitation, including patches, configuration changes, or defensive measures.
+5. **References**: Links to CVE database, exploit-db, or other authoritative sources (if known).
+6. **Ethical Use**: How this analysis can be used in authorized penetration testing, red teaming, or vulnerability research.
+
+Format the response in Markdown, suitable for security professionals. Emphasize that this analysis is for **authorized security research or testing only** and must comply with legal and ethical standards (e.g., PTES, OSSTMM, or laws like CFAA or GDPR). Do not provide executable exploit code unless explicitly requested for a controlled testing environment.
+"""
+
+        # Use the offensive system message for context in offensive mode
+        system_message = self.offensive_system_message()
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "system", "content": self.get_realtime_info()},
+            {"role": "user", "content": prompt}
+        ]
+
+        # Generate the analysis using the AI
+        response = self.generate_response(
+            messages,
+            temperature=0.3,  # Lower temperature for structured, factual output
+            max_tokens=1536   # Allow for detailed analysis
+        )
+
+        # Save the query to the security chat log
+        messages_log = self.load_chat_log(mode="security")
+        messages_log.append({"role": "user", "content": prompt})
+        messages_log.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages_log, mode="security")
+
+        return response
+
+      except Exception as e:
+        return f"Error analyzing exploit: {str(e)}"
+    def analyze_malware(self, file_path):
+      """Analyze a potential malware sample."""
+      try:
+        # Validate file existence
+        if not os.path.exists(file_path):
+            return f"Error: File '{file_path}' not found."
+        
+        # Create a detailed prompt for the AI
+        prompt = f"""As a cybersecurity expert, analyze a potential malware sample from the file: {file_path}. Since direct execution is not possible, provide a hypothetical analysis based on typical malware characteristics. Include:
+
+1. **Static Analysis**: Likely file characteristics, such as:
+   - File type and structure
+   - Embedded strings or signatures
+   - Packing or obfuscation techniques
+2. **Dynamic Analysis**: Expected behavior if executed, such as:
+   - System modifications
+   - Network activity
+   - Persistence mechanisms
+3. **Indicators of Compromise (IOCs)**: Hypothetical IOCs, such as:
+   - File hashes (MD5, SHA256)
+   - IP addresses or domains
+   - Registry keys or file paths
+4. **Mitigation**: Steps to contain and remove the malware, including:
+   - Isolation techniques
+   - Removal processes
+   - System hardening
+5. **Sandbox Notes**: Recommendations for safe analysis, such as:
+   - Required sandbox environment
+   - Tools for analysis (e.g., IDA Pro, Wireshark)
+   - Safety precautions
+
+Format the response in Markdown, suitable for security professionals. Emphasize that this analysis is for **authorized security research only** and must be conducted in a controlled, sandboxed environment. Comply with ethical and legal standards (e.g., NIST, OWASP, or laws like CFAA or GDPR).
+"""
+
+        # Use the security system message for context
+        system_message = self.security_system_message
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "system", "content": self.get_realtime_info()},
+            {"role": "user", "content": prompt}
+        ]
+
+        # Generate the analysis using the AI
+        response = self.generate_response(
+            messages,
+            temperature=0.3,  # Lower temperature for structured, factual output
+            max_tokens=1536   # Allow for detailed analysis
+        )
+
+        # Save the query to the security chat log
+        messages_log = self.load_chat_log(mode="security")
+        messages_log.append({"role": "user", "content": prompt})
+        messages_log.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages_log, mode="security")
+
+        return response
+
+      except Exception as e:
+        return f"Error analyzing malware: {str(e)}"
+    def threat_hunt(self, log_file):
+      """Perform threat hunting analysis on a log file."""
+      try:
+        # Validate file existence
+        if not os.path.exists(log_file):
+            return f"Error: Log file '{log_file}' not found."
+        
+        # Read log file content (limit to avoid token overflow)
+        with open(log_file, 'r') as file:
+            log_data = file.read()[:1000]  # Limit to 1000 characters for API safety
+        
+        # Create a detailed prompt for the AI
+        prompt = f"""As a cybersecurity expert, perform a threat hunting analysis on the following log data from file: {log_file}:
+Provide a comprehensive report including:
+
+1. **Suspicious Patterns**: Identified anomalies, such as unusual IP addresses, repeated failed logins, or unexpected commands.
+2. **Potential Threats**: Likely attack vectors or tactics, techniques, and procedures (TTPs) based on the data (e.g., brute force, data exfiltration).
+3. **Recommendations**: Specific steps to investigate further or mitigate identified risks, including:
+   - Additional log correlation
+   - Network traffic analysis
+   - System isolation or patching
+4. **Timeline**: Hypothetical sequence of events based on the log entries, if feasible.
+
+Format the response in Markdown, suitable for a SOC analyst. Emphasize that this analysis is for **authorized threat hunting only** and must comply with ethical and legal standards (e.g., NIST, MITRE ATT&CK, or laws like CFAA or GDPR). Provide actionable insights without speculative assumptions.
+"""
+
+        # Use the security system message for context
+        system_message = self.security_system_message
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "system", "content": self.get_realtime_info()},
+            {"role": "user", "content": prompt}
+        ]
+
+        # Generate the analysis using the AI
+        response = self.generate_response(
+            messages,
+            temperature=0.3,  # Lower temperature for structured, factual output
+            max_tokens=1536   # Allow for detailed analysis
+        )
+
+        # Save the query to the security chat log
+        messages_log = self.load_chat_log(mode="security")
+        messages_log.append({"role": "user", "content": prompt})
+        messages_log.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages_log, mode="security")
+
+        return response
+
+      except Exception as e:
+        return f"Error during threat hunting: {str(e)}"
+
     def _validate_target(self, target):
         """Validate if target is a domain or IP address."""
         # Check if target is an IP address
