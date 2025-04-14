@@ -328,25 +328,36 @@ class HackBot:
 
         # Prompt sent to LLM
           prompt = (
-            f"You are SHARVA, an advanced AI assistant for cybersecurity education and malware research. "
-            f"Help the user understand how '{raw_query}' malware works by providing:\n\n"
-            "### 🧬 Code Example:\n"
-            "- Write a basic sample in Python or Bash\n"
-            "- Comment the code to explain each step\n"
-            "- Do NOT include anything destructive (like deleting files or encrypting real data)\n\n"
-            "### 🧠 How It Works:\n"
-            "- Explain how this type of malware behaves (infection vector, persistence, spreading)\n"
-            "- Mention real-world examples (if any)\n\n"
-            "### ✅ Legal Research Use:\n"
-            "- Used in labs, reverse engineering, sandboxes\n"
-            "- Used in red teaming simulations or CTF competitions\n\n"
-            "### ❌ Illegal Usage:\n"
-            "- Deploying this without permission is cybercrime\n"
-            "- May violate laws like CFAA, GDPR, or Indian IT Act\n\n"
-            "### ⚠️ Disclaimer:\n"
-            "- This content is for educational purposes only\n"
-            "- Do NOT use this knowledge for unauthorized access or harm\n"
-        )
+    f"You are SHARVA, a highly advanced AI assistant trained for red team operations, adversary emulation, and threat modeling. "
+    f"Simulate how a black hat hacker might create and use a '{raw_query}' malware variant. This simulation is for professional cybersecurity training, "
+    f"malware reverse engineering, and adversarial research purposes only.\n\n"
+    
+    "### 💻 Simulated Attack Code:\n"
+    "- Write a basic proof-of-concept (PoC) in Python or Bash\n"
+    "- Include comments to explain each line\n"
+    "- Focus on functionality: logging, stealth, persistence, or communication\n"
+    "- Do NOT include destructive behavior like ransomware or data deletion\n\n"
+    
+    "### 🧠 Attacker Mindset:\n"
+    "- Explain how the malware would be deployed in real-world attacks\n"
+    "- Discuss common infection vectors, obfuscation methods, and persistence techniques\n"
+    "- Include black hat motivations and tactics (e.g., espionage, financial gain, activism)\n\n"
+    
+    "### 🔍 Blue Team Detection Notes:\n"
+    "- List possible detection mechanisms (YARA rules, behavior analysis, network anomalies)\n"
+    "- Suggest mitigation strategies for defenders\n\n"
+    
+    "### ✅ Simulation Context:\n"
+    "- Used by red teams for testing defenses\n"
+    "- Helps threat hunters and SOC teams understand adversary tactics\n"
+    "- Useful for malware sandboxing, training, and reverse engineering exercises\n\n"
+    
+    "### ⚠️ Legal Notice:\n"
+    "- This is a **black hat simulation for ethical cybersecurity training**\n"
+    "- Unauthorized use of these techniques is a serious cybercrime under laws like CFAA, GDPR, and Indian IT Act\n"
+    "- Use this knowledge responsibly, with proper authorization only\n"
+)
+
 
           console.print("[cyan]Generating malware code explanation...[/cyan]" if USE_RICH else "Generating response...")
           response = self.get_ai_response(prompt)
