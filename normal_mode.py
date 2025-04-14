@@ -241,6 +241,7 @@ class NormalMode:
         - `clear`: Clear the screen (or use Ctrl+L)
         - `help`: Show this help menu
         - `switch`: Switch to security mode
+        -`history': History of previous sessions
         
         ## Search & Conversation
         
@@ -252,6 +253,7 @@ class NormalMode:
         - `load <session_id>`: Load a previous session
         - `sessions`: List all saved sessions
         - `export <filename>`: Export conversation to file
+        
         
         ## Customization
         
