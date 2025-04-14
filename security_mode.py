@@ -19,6 +19,7 @@ import shutil
 from hackbot import HackBot
 from session import Session
 from session_name import Session
+from osint import PersonOSINT, integrate_person_osint
 
 console = Console()
 
@@ -40,6 +41,7 @@ class SecurityMode:
         # Import here to avoid circular imports
         from chat_engine import ChatEngine
         self.chat_engine = ChatEngine(config)
+        self.osint_module = PersonOSINT(chat_engine=self.chat_engine, config=config)
 
     def display_banner(self):
        """Display an enhanced security mode banner for SHARVA."""
@@ -77,7 +79,53 @@ class SecurityMode:
         """Generate a fake hash for visual effect."""
         hash_chars = "0123456789abcdef"
         return ''.join(random.choice(hash_chars) for _ in range(32))
-    
+    def osint(self, target=None):
+        """Perform OSINT reconnaissance on a target person."""
+        if self.security_mode != "offensive":
+            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+            return
+
+        if self.auth_level not in ["government", "certified"]:
+            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
+            console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
+            return
+
+        if not target:
+            target = Prompt.ask("[bold green]>[/bold green] Target Person (full name)")
+
+        console.print(Panel.fit("[bold red]🔍 SHARVA PERSON OSINT ENGINE ACTIVATED 🔍[/bold red]", style="bold red"))
+        console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+
+        # Run the person reconnaissance
+        result = self.osint_module.person_recon(target, depth="standard")
+
+        # Save and display the report (similar to recon method)
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"Data/Person_OSINT/person_{target.replace(' ', '_')}_{now}.md"
+        try:
+            with open(filename, "w") as f:
+                f.write(result)
+        except Exception as e:
+            console.print(f"[bold red]Failed to save report:[/bold red] {e}")
+            filename = None
+
+        # Render fancy report
+        console.print("\n[bold cyan]╔═══ PERSON OSINT REPORT ═════════════════════════════╗[/bold cyan]")
+        console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
+        console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] Person Intelligence - Standard")
+        console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+        if filename:
+            console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
+        console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
+
+        console.print(Markdown(result))
+        console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
+
+        # Privacy exposure score (mock)
+        console.print("\n[bold magenta]PRIVACY EXPOSURE SCORE:[/bold magenta] [bold yellow]58/100[/bold yellow] — [italic]Moderate digital footprint[/italic]")
+
+        console.print(Panel.fit("[bold green]✔ OSINT complete.[/bold green] For deeper analysis, escalate authorization or depth level.", style="green"))
     def _generate_glitchy_text(self, text):
         """Generate glitchy text with some characters randomly styled."""
         result = ""
@@ -418,7 +466,7 @@ class SecurityMode:
     'set_auth standard', 'set_auth government', 'set_auth certified',
     'vuln_analysis', 'static_code_analysis', 'threat_hunt',
     'malware_analysis', 'recon', 'pentest_report',
-    'exploit_analysis', 'payload_gen', 'show_threat_map', 'history'
+    'exploit_analysis', 'payload_gen', 'show_threat_map', 'history', 'osint'
 ]
         def completer(text, state):
             options = [cmd for cmd in commands if cmd.startswith(text)]
@@ -1316,6 +1364,10 @@ class SecurityMode:
                 self.payload_gen(platform)
             elif cmd.lower() == 'history':
                 self.show_history()
+            elif cmd.lower().startswith('osint'):
+                    parts = cmd.split(' ', 1)
+                    target = parts[1] if len(parts) > 1 else None
+                    self.osint(target)    
                 
             elif cmd.lower() == 'run_hackbot':
                 if self.security_mode != "offensive":
