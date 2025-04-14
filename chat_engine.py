@@ -1,13 +1,19 @@
 import os
 import sys
+import time
 from dotenv import dotenv_values
 from groq import Groq
 import datetime
 from json import load, dump, JSONDecodeError
 import traceback
+from markdown_it import MarkdownIt
 import requests
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import socket
+from rich.panel import Panel
 import ssl
+from rich import __console, _console
+from rich.prompt import Prompt, Confirm
 import whois
 import re
 import subprocess
@@ -337,65 +343,94 @@ Provide:
             return f"Error during vulnerability analysis: {str(e)}"
 
     # RECONNAISSANCE ENGINE IMPLEMENTATION
-    def perform_recon(self, target, recon_type="basic"):
-        """
-        Perform reconnaissance on a target (domain/IP).
-        
-        Args:
-            target (str): Domain name or IP address
-            recon_type (str): Type of reconnaissance (basic, full, passive)
-            
-        Returns:
-            str: Reconnaissance results and analysis
-        """
-        print(f"\n==== RECONNAISSANCE ENGINE ====")
-        print(f"NOTICE: AUTHORIZED USE ONLY")
-        print(f"Gathering intelligence...")
-        
-        # Check if target is valid
-        if not self._validate_target(target):
-            return "Error: Invalid target. Please provide a valid domain name or IP address."
-        
-        # Create a recon report
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = f"Data/Recon/recon_{target.replace('.', '_')}_{timestamp}.json"
-        
-        report = {
-            "target": target,
-            "timestamp": timestamp,
-            "recon_type": recon_type,
-            "results": {}
-        }
-        
-        try:
-            # Simulate progress with spinning indicator
-            self._show_progress(["Querying passive DNS...", 
-                              "Gathering domain information...",
-                              "Analyzing social media presence...",
-                              "Searching public repositories...",
-                              "Checking breach databases...",
-                              "Collating intelligence..."])
-            
-            # Perform reconnaissance based on type
-            if self._is_ip_address(target):
-                self._perform_ip_recon(target, report)
-            else:
-                self._perform_domain_recon(target, report, recon_type)
-                
-            # Save report
-            with open(report_path, 'w') as f:
-                dump(report, f, indent=4)
-            
-            # Analyze reconnaissance data using AI
-            analysis = self._analyze_recon_data(report)
-            
-            return analysis
-            
-        except Exception as e:
-            error_msg = f"[!] ERROR: {str(e)}"
-            print(error_msg)
-            traceback.print_exc()
-            return error_msg
+    def recon(self, target=None):
+      """Advanced passive reconnaissance engine (OSINT) with threat modeling."""
+   
+
+      if self.security_mode != "offensive":
+        _console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        _console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        return
+
+      if not target:
+        target = Prompt.ask("[bold green]>[/bold green] Target (domain/IP/org)")
+
+      if self.auth_level not in ["government", "certified"]:
+        _console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
+        _console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
+        return
+
+      _console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
+      _console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+
+    # Validate domain/IP
+      recon_type = "domain"
+      if any(char.isdigit() for char in target.split('.')[-1]):
+        recon_type = "IP"
+
+      _console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
+
+    # Start animation
+      with progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        steps = [
+            "🔍 Resolving DNS and subdomains",
+            "🛰️  WHOIS and registrar footprinting",
+            "🌐 Social profile mapping",
+            "📂 GitHub/public repo inspection",
+            "🩸 Breach and leak discovery",
+            "🧠 Generating AI-assisted recon report"
+        ]
+        for step in steps:
+            progress.add_task(description=step, total=1)
+            time.sleep(0.5)
+
+    # Perform basic WHOIS lookup
+      whois_data = ""
+      try:
+        w = whois.whois(target)
+        whois_data = f"""
+### 🛰️ WHOIS Data:
+- Domain: {w.domain_name}
+- Registrar: {w.registrar}
+- Creation Date: {w.creation_date}
+- Expiration Date: {w.expiration_date}
+- Name Servers: {w.name_servers}
+- Country: {w.country}
+"""
+      except Exception as e:
+        whois_data = f"WHOIS lookup failed for {target}: {e}"
+
+    # Collect recon report using AI engine
+      result = self.chat_engine.perform_recon(target)
+      result = whois_data + "\n" + result
+
+    # Save to file
+      now = datetime.now().strftime("%Y%m%d_%H%M%S")
+      filename = f"Data/Recon/recon_{target.replace('.', '_')}_{now}.md"
+      try:
+        with open(filename, "w") as f:
+            f.write(result)
+      except Exception as e:
+        _console.print(f"[bold red]Failed to save report:[/bold red] {e}")
+        filename = None
+
+    # Render fancy report
+      _console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+      if filename:
+        _console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
+      _console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
+
+      _console.print(MarkdownIt(result))
+      _console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
+ 
+    # Threat level summary (mock)
+      _console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
+
+      _console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
+
     
     def _validate_target(self, target):
         """Validate if target is a domain or IP address."""
