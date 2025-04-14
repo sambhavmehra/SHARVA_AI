@@ -118,7 +118,8 @@ class SecurityMode:
         commands_table.add_row("quit/exit", "Terminate application", "ALL")
         commands_table.add_row("save", "Save current session", "ALL")
         commands_table.add_row("load <id>", "Load a saved session", "ALL")
-        commands_table.add_row("sessions", "List all saved sessions", "ALL")
+        commands_table.add_row("history", "List all saved sessions", "ALL")
+        
 
         
         
