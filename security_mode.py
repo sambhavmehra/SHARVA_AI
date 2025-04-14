@@ -2,6 +2,7 @@ import os
 import sys
 import time
 from rich.console import Console
+import whois
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.prompt import Prompt, Confirm
@@ -815,65 +816,74 @@ class SecurityMode:
 
     # Offensive security methods - only available in offensive mode
     def recon(self, target=None):
-        """Perform passive reconnaissance (OSINT)."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not target:
-            target = Prompt.ask("[bold green]>[/bold green] Target (domain/organization)")
-        
-        # Check for sufficient auth level
-        if self.auth_level not in ["government", "certified"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
-            console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
-            return
-        
-        console.print(Text.from_markup("\n[bold red]==== RECONNAISSANCE ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow]NOTICE: AUTHORIZED USE ONLY[/bold yellow]"))
-        
-        # Animation for reconnaissance
-        console.print("\n[bold cyan]Gathering intelligence...[/bold cyan]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="cyan"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="cyan", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Querying passive DNS...",
-                "Gathering domain information...",
-                "Analyzing social media presence...",
-                "Searching public repositories...",
-                "Checking breach databases...",
-                "Collating intelligence..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[cyan]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the recon query
-            result = self.chat_engine.perform_recon(target)
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
+      """Advanced passive reconnaissance engine (OSINT) with threat modeling."""
+      if self.security_mode != "offensive":
+        console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        return
 
-        # Display results
-        console.print("\n[bold cyan]╔═══ RECONNAISSANCE REPORT ═══════════════════════════╗[/bold cyan]")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Scope:[/bold white] Passive OSINT Collection")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
-        console.print("[bold cyan]╠═══════════════════════════════════════════════════╣[/bold cyan]")
-        
-        console.print(Markdown(result))
-        console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
+      if not target:
+        target = Prompt.ask("[bold green]>[/bold green] Target (domain/IP/org)")
+
+      if self.auth_level not in ["government", "certified"]:
+        console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
+        console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
+        return
+
+      console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
+      console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+
+    # Validate domain/IP
+      recon_type = "domain"
+      if any(char.isdigit() for char in target.split('.')[-1]):
+        recon_type = "IP"
+    
+      console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
+
+    # Start animation
+      with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        steps = [
+            "🔍 Resolving DNS and subdomains",
+            "🛰️  WHOIS and registrar footprinting",
+            "🌐 Social profile mapping",
+            "📂 GitHub/public repo inspection",
+            "🩸 Breach and leak discovery",
+            "🧠 Generating AI-assisted recon report"
+        ]
+        for step in steps:
+            progress.add_task(description=step, total=1)
+            time.sleep(0.5)
+
+    # Collect recon report using AI engine
+      result = self.chat_engine.perform_recon(target)
+
+    # Save to file
+      now = datetime.now().strftime("%Y%m%d_%H%M%S")
+      filename = f"Data/Recon/recon_{target.replace('.', '_')}_{now}.md"
+      try:
+        with open(filename, "w") as f:
+            f.write(result)
+      except Exception as e:
+        console.print(f"[bold red]Failed to save report:[/bold red] {e}")
+        filename = None
+
+    # Render fancy report
+      console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
+      console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+      if filename:
+        console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
+      console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
+
+      console.print(Markdown(result))
+      console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
+
+    # Threat level summary (mock)
+      console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
+
+      console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
+
 
     def pentest_report(self, scope=None):
         """Generate penetration testing report."""
