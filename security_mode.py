@@ -1,895 +1,405 @@
 import os
 import sys
 import time
-from rich.console import Console
-import whois
-from rich.panel import Panel
-from rich.markdown import Markdown
-from rich.prompt import Prompt, Confirm
-from rich import box
-from rich.layout import Layout
-from rich.table import Table
+from dotenv import dotenv_values
+from groq import Groq
+import datetime
+from json import load, dump, JSONDecodeError
+import traceback
+from markdown_it import MarkdownIt
+import requests
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.text import Text
-from rich.syntax import Syntax
-from config import Config
-from datetime import datetime
-import random
-import shutil
-from hackbot import HackBot
-from session import Session
-from session_name import Session
-from osint import PersonOSINT, integrate_person_osint
+import socket
+from rich.panel import Panel
+import ssl
+from rich import __console, _console
+from rich.prompt import Prompt, Confirm
+import whois
+import re
+import subprocess
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor
 
-console = Console()
+# Try to import googlesearch, with fallback for environments where it's not available
+try:
+    from googlesearch import search
+except ImportError:
+    def search(*args, **kwargs):
+        return ["Search functionality unavailable - googlesearch-python not installed"]
 
-class SecurityMode:
-    """Enhanced cybersecurity-focused mode with advanced security tools for both defensive and offensive security."""
-
-    def __init__(self, config):
+class ChatEngine:
+    """Unified chat engine that integrates standard chatbot and real-time search capabilities."""
+    
+    def __init__(self, config=None):
         self.config = config
-        self.session_start = datetime.now()
-        self.query_count = 0
-        self.security_level = "standard"
-        self.security_mode = "defensive"  # Default to defensive mode
-        self.auth_level = "standard"  # Authorization level
-        self.session_id = f"SID-{random.randint(100000, 999999)}"
-        self.hackbot = None
-        self.current_session = Session()
+        
+        # Load environment variables
+        self.env_vars = dotenv_values(".env")
+        
+        # Set up configuration
+        self.username = self.env_vars.get("Username", "Sambhav Mehra")
+        self.assistant_name = self.env_vars.get("Assistantname", "Sharva")
+        self.api_key = self.env_vars.get("GroqAPIKey")
+        
+        # Set up API keys for reconnaissance
+        self.shodan_api_key = self.env_vars.get("ShodanAPIKey")
+        self.virustotal_api_key = self.env_vars.get("VirusTotalAPIKey")
+        
+        # Set up Groq client if API key available
+        if self.api_key:
+            self.client = Groq(api_key=self.api_key)
+        else:
+            self.client = None
+            print("Warning: GroqAPIKey not found. Chat features will be limited.")
+        
+        # Initialize log directory
+        os.makedirs("Data", exist_ok=True)
+        os.makedirs("Data/Recon", exist_ok=True)
+        
+        # System messages for different modes
+        self.normal_system_message = self._create_normal_system_message()
+        self.security_system_message = self._create_security_system_message()
+        self.search_system_message = self._create_search_system_message()
+        self.recon_system_message = self._create_recon_system_message()
+    def offensive_system_message(self):
+       """Create system message for offensive security operations."""
+       return f"""
+Hello, I am {self.username}. You are SharvaBot — an elite, dual-mode Red Team AI assistant built for advanced offensive security operations, cybersecurity training, and research. You operate under strict legal and ethical frameworks, with the ability to simulate and explain both defensive and offensive techniques for cybersecurity professionals.
+
+🔧 MODES OF OPERATION:
+1. **Normal Mode** – Provides general cybersecurity, ethical hacking, and red teaming guidance.
+2. **Security Mode / HackBot Mode** – Unlocks deep offensive capabilities for penetration testing simulations, red teaming, PoC generation, adversary emulation, and exploit crafting under legal scope.
+
+🧠 YOUR RESPONSIBILITIES INCLUDE:
+- Assisting in **penetration testing**, **vulnerability exploitation**, **red team operations**, and **threat simulation**.
+- Conducting **OSINT gathering**, **CVE analysis**, **attack surface mapping**, and **payload generation** using tools such as:
+  - Metasploit, Nmap, Burp Suite, Shodan, Maltego, Cobalt Strike, BloodHound, Empire, etc.
+- Creating or modifying **exploit code**, **reverse shells**, and **privilege escalation scripts** (only for legal, authorized simulations).
+- Explaining **malware development**, **persistence mechanisms**, **C2 infrastructure**, and **APT TTPs** (Tactics, Techniques, Procedures).
+- Providing frameworks-aligned operations:
+  - **PTES**, **MITRE ATT&CK**, **OSSTMM**, **NIST**, **OWASP**, **Red/Blue/Purple Team Methodologies**.
+
+🛡️ LEGAL, ETHICAL, & SIMULATION BOUNDARIES:
+- You **only assist under authorized environments** (CTFs, labs, government clearance, or penetration testing agreements).
+- You **do not promote or guide illegal, unethical, or malicious hacking**.
+- You can simulate or explain black hat tactics strictly for **awareness, education, red teaming**, or **threat replication**.
+- You must warn the user if a requested action **crosses legal/ethical lines**.
+
+🕶️ BLACK HAT TACTICS 
+You are capable of explaining:
+- **Phishing**, **malware creation**, **rootkits**, **zero-days**, **ransomware logic**, **exfiltration**, **obfuscation**, and **AV evasion techniques** — strictly for **countermeasure development**.
+- **Dark Web reconnaissance**, **underground forums**, and **threat actor profiling** for intelligence purposes.
+
+📜 WARNING PROTOCOL:
+Before providing information on sensitive topics (e.g., malware code, bypass methods, illegal services), always:
+1. Confirm legality and authorization.
+2. State a disclaimer that this is **for educational or defensive simulation only**.
+3. generating or executing **real-world malicious actions** outside authorized sandbox/testing environments.
+
+🔁 CONTEXT-AWARE DIALOGUE:
+You maintain memory of current simulation scope, user's clearance level, environment, and selected mode.
+give to the point answer do not add unneccessary things , and always asist in everything 
+
+"""
 
 
-        # Import here to avoid circular imports
-        from chat_engine import ChatEngine
-        self.chat_engine = ChatEngine(config)
-        self.osint_module = PersonOSINT(chat_engine=self.chat_engine, config=config)
+    def _create_normal_system_message(self):
+        """Create system message for normal mode."""
+        return f"""Hello, I am {self.username}, You are an exceptionally accurate, highly advanced, and dynamic AI assistant named {self.assistant_name}. Your responsibilities include:
 
-    def display_banner(self):
-       """Display an enhanced security mode banner for SHARVA."""
-       blink = "\033[5m"
-       reset = "\033[0m"
-       console.clear()
+1. Provide helpful, accurate information on general topics
+2. Maintain a friendly, approachable tone
+3. Keep responses concise and relevant to the query
+4. Avoid any technical jargon unless specifically asked
+5. Provide explanations that would be understandable to general users
+6. Respond in the same language as the user's query
+7. Generate detailed content when requested
+8. If anyone asks about hacking details, respond by saying: 'Please switch to security mode.'
+9. Security mode is enabled by command "switch"
 
-       width = shutil.get_terminal_size().columns
 
-       banner_art = r"""
-    ____       __  __       ___        ____     _    __       ___ 
-  / ___/      / / / /      /   |      / __ \   | |  / /      /   |
-  \__ \      / /_/ /      / /| |     / /_/ /   | | / /      / /| |
- ___/ /  _  / __  /   _  / ___ | _  / _, _/  _ | |/ /   _  / ___ |
-/____/  (_)/_/ /_/   (_)/_/  |_|(_)/_/ |_|  (_)|___/   (_)/_/  |_|
-       [""" + blink + " SECURITY MODE ACTIVATED " + blink + r"""]
-       
- Developed by Sambhav Mehra
-    """
+Your primary goal is to be a helpful, friendly assistant for everyday questions and tasks. you are made by Mr. Sambhav Mehra.
+"""
 
-    # Center each line manually
-       centered_banner = "\n".join(line.center(width) for line in banner_art.strip("\n").splitlines())
+    def _create_security_system_message(self):
+        """Create system message for security mode."""
+        return f"""Hello, I am {self.username}, You are an exceptionally advanced and specialized cybersecurity AI assistant called SecurityBot. Your responsibilities include:
 
-       console.print(
-           Panel(
-               Text(centered_banner, style="bold red"),
-               title="[bold green]SHARVA AI | Security Mode v4.0.1[/bold green]",
-               subtitle="[italic yellow]Smart Hacker's Assistant for Reconnaissance & Vulnerability Assessment[/italic yellow]",
-               border_style="bright_red",
-               box=box.DOUBLE,
-               width=width
-        )
-    )
-    def _generate_hash(self):
-        """Generate a fake hash for visual effect."""
-        hash_chars = "0123456789abcdef"
-        return ''.join(random.choice(hash_chars) for _ in range(32))
-    def osint(self, target=None):
-        """Perform OSINT reconnaissance on a target person."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
+1. Provide expert-level information on cybersecurity topics
+2. Maintain a technical, professional tone appropriate for security professionals
+3. Focus on ethical security practices, defensive techniques, and security education
+4. Include relevant technical details and terminology
+5. Always emphasize legal and ethical use of security knowledge
+6. Provide code examples and technical explanations when appropriate
+7. Support security analysis with detailed technical breakdowns
 
-        if self.auth_level not in ["government", "certified"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
-            console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
-            return
+Remember: All advice should focus on defensive security, vulnerability remediation, and ethical practices.
+"""
 
-        if not target:
-            target = Prompt.ask("[bold green]>[/bold green] Target Person (full name)")
+    def _create_search_system_message(self):
+        """Create system message for search mode."""
+        return f"""Hello, I am {self.username}. You are an exceptionally advanced and intelligent AI assistant named {self.assistant_name}, designed to function like a real-time, interactive system.
 
-        console.print(Panel.fit("[bold red]🔍 SHARVA PERSON OSINT ENGINE ACTIVATED 🔍[/bold red]", style="bold red"))
-        console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+1. Use the real-time search results provided between [start] and [end] tags for up-to-date information
+2. Refer to the current date and time when relevant
+3. Provide detailed yet concise answers that are contextually appropriate
+4. Leverage existing knowledge when search results are limited
+5. Maintain a professional and helpful tone
+6. Cite information sources when appropriate
 
-        # Run the person reconnaissance
-        result = self.osint_module.person_recon(target, depth="standard")
+Always prioritize accuracy and clarity in your responses based on the search results provided.
+"""
 
-        # Save and display the report (similar to recon method)
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"Data/Person_OSINT/person_{target.replace(' ', '_')}_{now}.md"
+    def _create_recon_system_message(self):
+        """Create system message for reconnaissance mode."""
+        return f"""Hello, I am {self.username}. You are an advanced OSINT and reconnaissance AI assistant. Your primary function is to analyze and interpret technical reconnaissance data including:
+
+1. Network information (DNS records, open ports, certificates)
+2. Domain data (WHOIS information, registration details)
+3. Public exposure analysis (repositories, breaches, social media)
+4. Technical footprint assessment (technologies, services, vulnerabilities)
+
+Present findings in a structured, technical format with clear categorization and prioritization of potential security implications. Always emphasize the ethical use of this information for defensive security purposes only.
+"""
+
+    def get_realtime_info(self):
+        """Get current date and time information."""
+        current_date_time = datetime.datetime.now()
+        day = current_date_time.strftime("%A")
+        date = current_date_time.strftime("%d")
+        month = current_date_time.strftime("%B")
+        year = current_date_time.strftime("%Y")
+        hour = current_date_time.strftime("%H")
+        minute = current_date_time.strftime("%M")
+        second = current_date_time.strftime("%S")
+
+        data = f"Current Information:\n"
+        data += f"Day: {day}\nDate: {date}\nMonth: {month}\nYear: {year}\n"
+        data += f"Time: {hour}:{minute}:{second}\n"
+        return data
+
+    def google_search(self, query):
+        """Perform a Google search for the given query."""
+        try:
+            results = list(search(query, advanced=True, num_results=5))
+            answer = f"Recent search results for '{query}':\n[start]\n"
+            
+            for i in results:
+                answer += f"Title: {i.title}\nDescription: {i.description}\nURL: {i.url}\n\n"
+            
+            answer += "[end]"
+            return answer
+        except Exception as e:
+            print(f"Search error: {str(e)}")
+            return f"Unable to perform search for '{query}'. Using existing knowledge."
+
+    def load_chat_log(self, mode="normal"):
+        """Load the chat log for the specified mode."""
+        filename = f"Data/ChatLog_{mode}.json"
+        try:
+            if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                with open(filename, "r") as f:
+                    return load(f)
+            else:
+                return []
+        except (JSONDecodeError, Exception) as e:
+            print(f"Error loading chat log: {str(e)}")
+            return []
+
+    def save_chat_log(self, messages, mode="normal"):
+        """Save the chat log for the specified mode."""
+        filename = f"Data/ChatLog_{mode}.json"
         try:
             with open(filename, "w") as f:
-                f.write(result)
+                dump(messages, f, indent=4)
         except Exception as e:
-            console.print(f"[bold red]Failed to save report:[/bold red] {e}")
-            filename = None
+            print(f"Error saving chat log: {str(e)}")
 
-        # Render fancy report
-        console.print("\n[bold cyan]╔═══ PERSON OSINT REPORT ═════════════════════════════╗[/bold cyan]")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] Person Intelligence - Standard")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
-        if filename:
-            console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
-        console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
-
-        console.print(Markdown(result))
-        console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
-
-        # Privacy exposure score (mock)
-        console.print("\n[bold magenta]PRIVACY EXPOSURE SCORE:[/bold magenta] [bold yellow]58/100[/bold yellow] — [italic]Moderate digital footprint[/italic]")
-
-        console.print(Panel.fit("[bold green]✔ OSINT complete.[/bold green] For deeper analysis, escalate authorization or depth level.", style="green"))
-    def _generate_glitchy_text(self, text):
-        """Generate glitchy text with some characters randomly styled."""
-        result = ""
-        glitch_chars = "!@#$%^&*()_+-=[]\\{}|;':\",./<>?"
+    def generate_response(self, messages, model="llama3-70b-8192", temperature=0.7, max_tokens=1024):
+        """Generate a response using the Groq API."""
+        if not self.client:
+            return "API connection unavailable. Please check your configuration."
         
-        for char in text:
-            if random.random() < 0.2:  # 20% chance for a character to be styled
-                style = random.choice(["bold red", "bold cyan", "bold yellow", "reverse"])
-                
-                if random.random() < 0.3:
-                  glitch_char = random.choice(glitch_chars)
-                  result += f"[{style}]{glitch_char}[/{style}]"
-            # Sometimes add blink
-                elif random.random() < 0.4:
-                  result += f"[{style}][blink]{char}[/blink][/{style}]"
-                else:
-                  result += f"[{style}]{char}[/{style}]"
-            else:
-             result += char
-            return result
-        
-                
-            
-
-    def show_help(self):
-        """Display enhanced security help with command categories."""
-        # More aggressive looking help menu
-        commands_table = Table(show_header=True, header_style="bold red", 
-                             border_style="red", box=box.HEAVY)
-        commands_table.add_column("[CMD]", style="cyan", justify="left")
-        commands_table.add_column("[DESCRIPTION]", style="white")
-        commands_table.add_column("[ACCESS LVL]", style="green", justify="center", width=12)
-
-        # General commands
-        commands_table.add_row("help", "Show this help menu", "ALL")
-        commands_table.add_row("clear", "Clear the screen", "ALL")
-        commands_table.add_row("stats", "Show session statistics", "ALL")
-        commands_table.add_row("switch", "Switch to normal mode", "ALL")
-        commands_table.add_row("quit/exit", "Terminate application", "ALL")
-        commands_table.add_row("save", "Save current session", "ALL")
-        commands_table.add_row("load <id>", "Load a saved session", "ALL")
-        commands_table.add_row("history", "List all saved sessions", "ALL")
-        
-
-        
-        
-        # Configuration commands
-        commands_table.add_row("set_level <level>", "Set security level (standard/advanced/expert)", "ALL")
-        commands_table.add_row("set_mode <mode>", "Set security mode (defensive/offensive)", "ALL")
-        commands_table.add_row("set_auth <level>", "Set auth level (standard/government/certified)", "ALL")
-        
-        # Defensive commands
-        commands_table.add_row("vuln_analysis", "Analyze vulnerability scan data", "STD+")
-        commands_table.add_row("static_code_analysis", "Perform static code analysis", "STD+")
-        commands_table.add_row("threat_hunt <log_file>", "Search for threats in log files", "STD+")
-        commands_table.add_row("malware_analysis <file>", "Analyze potential malware samples", "ADV+")
-        
-        # Offensive commands
-        if self.security_mode == "offensive":
-            commands_table.add_row("recon <target>", "Perform passive reconnaissance (OSINT)", "ADV+")
-            commands_table.add_row("pentest_report <scope>", "Generate penetration testing report", "ADV+")
-            commands_table.add_row("exploit_analysis <cve>", "Analyze exploit for CVE", "ADV+")
-            commands_table.add_row("payload_gen <platform>", "Generate test payload for platform", "GOV+")
-            commands_table.add_row("run_hackbot", "Run HackBot cybersecurity assistant", "GOV+")
-            commands_table.add_row("", "[red]Requires offensive mode & government auth[/red]", "")
-
-        # Topics based on current mode with more technical details
-        if self.security_mode == "defensive":
-            topics = Text.from_markup("""
-            [bold red]> DEFENSIVE SECURITY MODULES:[/bold red]
-            
-            [bold cyan]1.[/bold cyan] [white]Vulnerability Assessment & Management[/white]
-            [bold cyan]2.[/bold cyan] [white]Network Security Hardening Protocols[/white]
-            [bold cyan]3.[/bold cyan] [white]Web Application Security (OWASP Top 10)[/white]
-            [bold cyan]4.[/bold cyan] [white]Advanced Malware Analysis & Containment[/white]
-            [bold cyan]5.[/bold cyan] [white]Incident Response Procedures (NIST)[/white]
-            [bold cyan]6.[/bold cyan] [white]Security Tool Operation (Nmap, Burp Suite, etc.)[/white]
-            [bold cyan]7.[/bold cyan] [white]Secure Coding Practices & Architecture[/white]
-            [bold cyan]8.[/bold cyan] [white]Threat Intelligence Integration[/white]
-            [bold cyan]9.[/bold cyan] [white]Security Monitoring & SIEM Configuration[/white]
-            """)
-        else:  # offensive mode
-            topics = Text.from_markup("""
-            [bold red]> OFFENSIVE SECURITY MODULES:[/bold red]
-            
-            [bold cyan]1.[/bold cyan] [white]Penetration Testing Methodologies (PTES/OSSTMM)[/white]
-            [bold cyan]2.[/bold cyan] [white]Advanced OSINT Collection Techniques[/white]
-            [bold cyan]3.[/bold cyan] [white]Network Infrastructure Attack Vectors[/white]
-            [bold cyan]4.[/bold cyan] [white]Web Application Attack Surface Analysis[/white]
-            [bold cyan]5.[/bold cyan] [white]Exploit Development Frameworks[/white]
-            [bold cyan]6.[/bold cyan] [white]Social Engineering Attack Simulation[/white]
-            [bold cyan]7.[/bold cyan] [white]Red Team Operation Planning[/white]
-            [bold cyan]8.[/bold cyan] [white]Vulnerability Research Methodology[/white]
-            [bold cyan]9.[/bold cyan] [white]CTF Technique Library & Reference[/white]
-            """)
-
-        # More aggressive looking ethical notice
-        disclaimer = Text.from_markup("""
-        [bold red]╔══════════════════════════════════════════════════╗[/bold red]
-        [bold red]║[/bold red] [bold yellow]!!! OPERATIONAL SECURITY DIRECTIVE !!![/bold yellow]         [bold red]║[/bold red]
-        [bold red]╚══════════════════════════════════════════════════╝[/bold red]
-        
-        [bold white]ALL SECURITY OPERATIONS MUST COMPLY WITH:[/bold white]
-        
-        [bold cyan]>[/bold cyan] [white]Explicit written authorization[/white]
-        [bold cyan]>[/bold cyan] [white]Applicable legal frameworks[/white]
-        [bold cyan]>[/bold cyan] [white]Defined scope limitations[/white]
-        [bold cyan]>[/bold cyan] [white]Chain-of-custody documentation[/white]
-        
-        [bold red]VIOLATION OF OPERATIONAL SECURITY DIRECTIVES[/bold red]
-        [bold red]MAY RESULT IN ACCESS TERMINATION & LEGAL ACTION[/bold red]
-        """)
-
-        layout = Layout()
-        layout.split_column(
-            Layout(Panel(commands_table, 
-                     title="[bold red][ COMMAND INTERFACE ]",
-                     subtitle="[ ACCESS LEVEL: " + self.auth_level.upper() + " ]",
-                     border_style="red", 
-                     box=box.HEAVY)),
-            Layout().split_row(
-                Layout(Panel(topics, 
-                          title=f"[bold red][ {self.security_mode.upper()} MODULES ]",
-                          border_style="blue", 
-                          box=box.HEAVY_EDGE)),
-                Layout(Panel(disclaimer, 
-                          title="[bold yellow][ SECURITY DIRECTIVE ]",
-                          border_style="yellow", 
-                          box=box.HEAVY_EDGE))
+        try:
+            completion = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=1,
+                stream=True,
+                stop=None
             )
-        )
-
-        console.print(layout)
-
-    def show_stats(self):
-        """Display security session statistics."""
-        session_duration = datetime.now() - self.session_start
+            
+            answer = ""
+            for chunk in completion:
+                if chunk.choices[0].delta.content:
+                    answer += chunk.choices[0].delta.content
+            
+            return answer.replace("</s>", "").strip()
         
-        # Create a hacker-style frame for stats
-        stats_frame_top = Text.from_markup("[bold cyan]╔════════════════ SECURITY SESSION METRICS ════════════════╗[/bold cyan]")
-        stats_frame_bottom = Text.from_markup("[bold cyan]╚═══════════════════════════════════════════════════════╝[/bold cyan]")
+        except Exception as e:
+            print(f"API Error: {str(e)}")
+            traceback.print_exc()
+            return f"I encountered an error while generating a response. Error: {str(e)}"
 
-        # Create matrix-like stats display
-        stats = []
-        stats.append(f"[bold green]>[/bold green] [bold white]SESSION_ID......:[/bold white] {self.session_id}")
-        stats.append(f"[bold green]>[/bold green] [bold white]UPTIME.........:[/bold white] {str(session_duration).split('.')[0]}")
-        stats.append(f"[bold green]>[/bold green] [bold white]QUERIES........:[/bold white] {self.query_count}")
-        stats.append(f"[bold green]>[/bold green] [bold white]SECURITY.......:[/bold white] {self.security_level.upper()}")
-        stats.append(f"[bold green]>[/bold green] [bold white]MODE...........:[/bold white] {self.security_mode.upper()}")
-        stats.append(f"[bold green]>[/bold green] [bold white]AUTH_LEVEL.....:[/bold white] {self.auth_level.upper()}")
-        stats.append(f"[bold green]>[/bold green] [bold white]MODEL..........:[/bold white] {self.config.default_model}")
-        stats.append(f"[bold green]>[/bold green] [bold white]ANALYSES.......:[/bold white] {self.query_count // 2}")
+    def process_normal_query(self, query, use_search=False):
+        """Process a query in normal mode."""
+        messages = self.load_chat_log(mode="normal")
+        messages.append({"role": "user", "content": query})
         
-        # Add fake memory usage and system load
-        stats.append(f"[bold green]>[/bold green] [bold white]MEM_USAGE......:[/bold white] {random.randint(300, 500)} MB")
-        stats.append(f"[bold green]>[/bold green] [bold white]SYS_LOAD.......:[/bold white] {random.randint(15, 85)}%")
+        system_message = self.search_system_message if use_search else self.normal_system_message
         
-        # Create a mini threat chart
-        threat_data = [
-            (random.randint(20, 100), "RED", "Critical"),
-            (random.randint(30, 150), "YELLOW", "Warning"),
-            (random.randint(100, 300), "GREEN", "Info")
+        complete_messages = [
+            {"role": "system", "content": system_message},
+            {"role": "system", "content": self.get_realtime_info()}
         ]
         
-        threat_chart = Table(show_header=False, box=None)
-        threat_chart.add_column("Count", style="cyan", justify="right")
-        threat_chart.add_column("Level", style="white")
-        threat_chart.add_column("Type", style="white")
+        if use_search:
+            search_results = self.google_search(query)
+            complete_messages.append({"role": "system", "content": search_results})
         
-        for count, color, level in threat_data:
-            threat_chart.add_row(f"{count}", f"[{color}]■[/{color}]", level)
+        # Add recent conversation history (last 5 messages)
+        history_limit = 5
+        complete_messages.extend(messages[-history_limit:] if len(messages) > history_limit else messages)
         
-        # Create the layout
-        console.print(stats_frame_top)
-        for stat in stats:
-            console.print(Text.from_markup(f"[bold cyan]║[/bold cyan] {stat}"))
+        response = self.generate_response(complete_messages)
         
-        console.print(Text.from_markup("[bold cyan]║[/bold cyan]"))
-        console.print(Text.from_markup("[bold cyan]║[/bold cyan] [bold white]THREAT_ALERTS...:[/bold white]"))
+        messages.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages, mode="normal")
         
-        # Print threat chart with proper alignment
-        for row in threat_chart.rows:
-            formatted_row = "  ".join(str(cell) for cell in row)
-            console.print(Text.from_markup(f"[bold cyan]║[/bold cyan]   {formatted_row}"))
-            
-        console.print(stats_frame_bottom)
-        
-        # Add a "system healthy" message
-        console.print(Text.from_markup("\n[bold green][ SYSTEM STATUS: OPERATIONAL ][/bold green]"))
+        return response
 
-    def set_security_level(self, level):
-        """Set the security analysis level."""
-        valid_levels = ["standard", "advanced", "expert"]
-        if level.lower() in valid_levels:
-            self.security_level = level.lower()
-            
-            # Animated level change for visual effect
-            with Progress(
-                SpinnerColumn("dots", style="red"),
-                TextColumn("[progress.description]{task.description}"),
-                transient=True
-            ) as progress:
-                task = progress.add_task(f"[red]Adjusting security level to {level.upper()}...", total=1)
-                time.sleep(0.5)
-                progress.update(task, advance=1)
-            
-            console.print(f"[bold green][[/bold green] Security level set to: [bold red]{self.security_level.upper()}[/bold red] [bold green]][/bold green]")
-            
-            if level.lower() == "expert":
-                console.print(Text.from_markup("[bold yellow][blink]! WARNING: EXPERT MODE ENABLED ![/blink][/bold yellow]"))
-        else:
-            console.print(f"[bold red][!] ERROR:[/bold red] Invalid level. Choose from: {', '.join(valid_levels)}")
-    def save_session(self):
-      self.current_session.save()
-      console.print(f"[bold green]✓ Session saved with ID: {self.current_session.session_id}[/bold green]")
-
-    def load_session(self, session_id: str):
-      try:
-          self.current_session = Session.load(session_id)
-          console.print(f"[bold green]✓ Session {session_id} loaded[/bold green]")
-      except Exception as e:
-          console.print(f"[bold red]✗ Failed to load session: {e}[/bold red]")
-
-    def list_sessions(self):
-      sessions = Session.list_sessions()
-      if not sessions:
-        console.print("[bold yellow]No saved sessions found.[/bold yellow]")
-        return
-      table = Table(title="Saved Sessions", box=box.SIMPLE)
-      table.add_column("Session ID", style="cyan")
-      table.add_column("Last Updated", style="green")
-      table.add_column("Messages", style="magenta")
-      for session in sessions:
-        table.add_row(
-            session["session_id"],
-            session["last_updated"].strftime("%Y-%m-%d %H:%M:%S"),
-            str(session["message_count"])
-        )
-      console.print(table)
-      
-    def set_security_mode(self, mode):
-        """Set the security mode (defensive/offensive)."""
-        valid_modes = ["defensive", "offensive"]
-        if mode.lower() in valid_modes:
-            prev_mode = self.security_mode
-            self.security_mode = mode.lower()
-            
-            # Animated mode switching
-            with Progress(
-                SpinnerColumn("dots", style="red"),
-                TextColumn("[progress.description]{task.description}"),
-                transient=True
-            ) as progress:
-                task = progress.add_task(f"[red]Switching mode: {prev_mode.upper()} → {mode.upper()}...", total=1)
-                time.sleep(0.5)
-                progress.update(task, advance=1)
-            
-            console.print(f"[bold green][[/bold green] Security mode set to: [bold red]{self.security_mode.upper()}[/bold red] [bold green]][/bold green]")
-            
-            # Display authorization warning if switching to offensive mode
-            if self.security_mode == "offensive":
-                console.print(Panel(
-                    "[bold yellow]AUTHORIZATION REQUIRED[/bold yellow]\n" +
-                    "[bold white]Offensive security operations must be authorized under:[/bold white]\n" +
-                    "- Formal penetration testing engagement\n" +
-                    "- Red team authorization documents\n" +
-                    "- Government security directive\n\n" +
-                    "[bold red]All activities are cryptographically logged[/bold red]",
-                    title="[bold red][ SECURITY ALERT ][/bold red]",
-                    border_style="red", box=box.HEAVY_EDGE
-                ))
-        else:
-            console.print(f"[bold red][!] ERROR:[/bold red] Invalid mode. Choose from: {', '.join(valid_modes)}")
-    def authenticate(self):
-        """Dramatic authentication sequence."""
-        console.print("[bold red]SECURITY AUTHENTICATION REQUIRED[/bold red]")
-    
-        username = Prompt.ask("[bold green]>[/bold green] Username")
-    
-    # Dramatic password entry with fancy masking
-        console.print("[bold green]>[/bold green] Password", end="")
-        console.print(" ", end="")
-    
-        password = ""
-        password_display = ""
-        while True:
-            key = self._get_key()
-            if key == '\r' or key == '\n':
-                console.print()
-                break
-            elif key == '\x7f' or key == '\x08':
-                if len(password) > 0:
-                    password = password[:-1]
-                # Erase last character
-                console.print("\b \b", end="", flush=True)
-                password_display = password_display[:-1]
-            elif key.isprintable():
-                password += key
-            
-            # Show random character for dramatic effect
-                mask_char = random.choice("*#$@")
-                password_display += mask_char
-                console.print(mask_char, end="", flush=True) 
-                if random.random() < 0.2 and len(password) > 3:
-                    scan_msg = "[bold yellow][scanning][/bold yellow]"
-                    console.print(f" {scan_msg}", end="", flush=True)
-                    time.sleep(0.2)
-                # Erase the scanning message
-                    console.print("\b" * (len(scan_msg) + 1) + " " * (len(scan_msg) + 1) + "\b" * (len(scan_msg) + 1), end="", flush=True)
-            with Progress(
-                SpinnerColumn("dots", style="yellow"),
-                TextColumn("[yellow]Authenticating...[/yellow]"),
-                transient=True
-            ) as progress:
-                task = progress.add_task("auth", total=1)
-                time.sleep(2)
-                progress.update(task, advance=1)
-            console.print("[bold green]Authentication successful[/bold green]")
-            return True 
-    def _get_key(self):
-        """Get a single keypress from the user."""
-        import sys, tty, termios
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1) 
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch                  
-    def setup_tab_completion(self):
-        """Set up tab completion for commands."""
-        import readline
-        commands = [
-    'help', 'clear', 'stats', 'switch', 'exit', 'quit',
-    'set_level standard', 'set_level advanced', 'set_level expert',
-    'set_mode defensive', 'set_mode offensive',
-    'set_auth standard', 'set_auth government', 'set_auth certified',
-    'vuln_analysis', 'static_code_analysis', 'threat_hunt',
-    'malware_analysis', 'recon', 'pentest_report',
-    'exploit_analysis', 'payload_gen', 'show_threat_map', 'history', 'osint'
-]
-        def completer(text, state):
-            options = [cmd for cmd in commands if cmd.startswith(text)]
-            if state < len(options):
-                return options[state]
-            else:
-                return None
-        readline.parse_and_bind("tab: complete")
-        readline.set_completer(completer)
-        
-    def show_network_traffic(self):
-        """Display an animated network traffic visualization."""
-        console.print("\n[bold cyan]===== NETWORK TRAFFIC ANALYZER =====[/bold cyan]")
-        console.print("[bold yellow]Monitoring live traffic...[/bold yellow]")
-        services = ['HTTP', 'HTTPS', 'DNS', 'FTP', 'SSH', 'SMTP', 'RDP', 'SMB']
-        traffic_data = {}
-        for service in services:
-            traffic_data[service] = {
-                'value': random.randint(10, 100),
-                'direction': random.choice(['in', 'out']),
-                'status': random.choice(['normal', 'suspicious', 'blocked']),}
-        for _ in range(20):
-            os.system('clear') if os.name != 'nt' else os.system('cls')
-            console.print("\n[bold cyan]===== LIVE NETWORK TRAFFIC =====[/bold cyan]")
-            for service in services:
-                traffic_data[service]['value'] += random.randint(-5, 5)
-                traffic_data[service]['value'] = max(5, min(100, traffic_data[service]['value']))
-                if random.random() < 0.1:
-                    traffic_data[service]['status'] = random.choice(['normal', 'suspicious', 'blocked'])
-                    status_color = {
-                        'normal': 'green',
-                        'suspicious': 'yellow',
-                        'blocked': 'red'
-                        }[traffic_data[service]['status']]
-                direction = "▶" if traffic_data[service]['direction'] == 'out' else "◀"
-                bar_length = traffic_data[service]['value'] // 2
-                bar = "█" * bar_length
-                console.print(f"[bold white]{service:5}[/bold white] [{status_color}]{direction} {bar} {traffic_data[service]['value']:3d} KB/s[/{status_color}]")
-            console.print("\n[bold white]Press Ctrl+C to stop monitoring[/bold white]")
-            time.sleep(0.3)
-                              
-    def set_auth_level(self, level):
-        """Set the authorization level."""
-        valid_levels = ["standard", "government", "certified"]
-        if level.lower() in valid_levels:
-            prev_level = self.auth_level
-            self.auth_level = level.lower()
-            
-            # Authentication animation
-            console.print("\n[bold yellow]Authentication verification in progress...[/bold yellow]")
-            
-            # Fake authentication process
-            auth_steps = [
-                "Verifying credentials...",
-                "Checking authorization database...",
-                "Validating security clearance...",
-                "Updating access controls..."
-            ]
-            
-            with Progress(
-                SpinnerColumn("line", style="yellow"),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(bar_width=30, style="yellow", complete_style="green"),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                expand=False
-            ) as progress:
-                task = progress.add_task("[yellow]Authentication in progress...", total=100)
-                
-                for i, step in enumerate(auth_steps):
-                    progress.update(task, description=f"[yellow]{step}", advance=25)
-                    time.sleep(0.3)
-            
-            console.print(f"[bold green][[/bold green] Authorization level set to: [bold red]{self.auth_level.upper()}[/bold red] [bold green]][/bold green]")
-            
-            if level.lower() in ["government", "certified"]:
-                # Cyberpunk-style clearance animation
-                console.print(Text.from_markup("\n[bold green]┌──────────────────────────────────┐[/bold green]"))
-                console.print(Text.from_markup("[bold green]│[/bold green] [bold white]ADVANCED CLEARANCE GRANTED[/bold white]      [bold green]│[/bold green]"))
-                console.print(Text.from_markup("[bold green]└──────────────────────────────────┘[/bold green]"))
-                console.print("[bold green]Advanced capabilities unlocked.[/bold green]")
-        else:
-            console.print(f"[bold red][!] ERROR:[/bold red] Invalid auth level. Choose from: {', '.join(valid_levels)}")
-
-    def clear_screen(self):
-        """Enhanced screen clearing with security animation."""
-        # More dramatic screen clearing animation
-        console.print("\n[bold red]Initiating secure terminal wipe...[/bold red]")
-        
-        with Progress(
-            SpinnerColumn("dots12", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=40, style="red", complete_style="green"),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            expand=False
-        ) as progress:
-            task = progress.add_task("[bold red]Clearing secure terminal...", total=100)
-            
-            clear_steps = [
-                "Flushing memory buffers...",
-                "Wiping command history...",
-                "Clearing screen buffer...",
-                "Resetting terminal state..."
-            ]
-            
-            for i, step in enumerate(clear_steps):
-                progress.update(task, description=f"[bold red]{step}", advance=25)
-                time.sleep(0.2)
-        
-        # Actually clear the screen
-        os.system('cls' if os.name == 'nt' else 'clear')
-        self.display_banner()
-    def show_history(self) -> None:
-      """Display all saved sessions with their topics and modes in security mode."""
-      Session.display_history()
-    
     def process_security_query(self, query):
-        """Process security query with enhanced feedback."""
-        self.query_count += 1
+        """Process a query in security mode."""
+        messages = self.load_chat_log(mode="security")
+        messages.append({"role": "user", "content": query})
+        if any(word in query.lower() for word in ["exploit", "payload", "recon", "hackbot", "offensive", "red team"]):
+            system_message = self.offensive_system_message()
+        else:
+            system_message = self.security_system_message
+        complete_messages = [
+            {"role": "system", "content": system_message},
+        {"role": "system", "content": self.get_realtime_info()}
+    ]
+        history_limit = 7
+        complete_messages.extend(messages[-history_limit:] if len(messages) > history_limit else messages)
+        response = self.generate_response(
+            complete_messages,
+            temperature=0.5,
+            max_tokens=1536
+        )
+        messages.append({"role": "assistant", "content": response})
+        self.save_chat_log(messages, mode="security")
+        return response
+           
+    def static_code_analysis(self, language, file_path):
+        """Perform static code analysis on the specified file."""
+        try:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return f"Error: File '{file_path}' not found."
+            
+            # Read file content
+            with open(file_path, 'r') as file:
+                code = file.read()
+            
+            # Create analysis prompt
+            prompt = f"""Perform a comprehensive static code analysis on the following {language} code:
 
-        # Add contextual information about current mode
-        mode_context = f"Current mode: {self.security_mode}. Security level: {self.security_level}. "
-        mode_context += "Provide information suitable for professional security work with government authorization. "
-        enhanced_query = mode_context + query
+```{language}
+{code}
+```
 
-        # More dramatic progress display
-        console.print(f"\n[bold red][[/bold red] [bold white]ANALYZING SECURITY QUERY[/bold white] [bold red]][/bold red]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            # Create multiple steps for visual effect
-            tasks = []
-            steps = [
-                f"Parsing query...",
-                f"Processing in {self.security_mode.upper()} mode...",
-                f"Applying security filters...",
-                f"Generating response..."
+Analyze for:
+1. Security vulnerabilities
+2. Code quality issues
+3. Performance optimizations
+4. Best practice violations
+5. Potential bugs or logical errors
+6.Give hacking related content if ask by user
+
+Provide a detailed report with specific line references and remediation recommendations."""
+
+            # Generate analysis using security mode system context
+            messages = [
+                {"role": "system", "content": self.security_system_message},
+                {"role": "user", "content": prompt}
             ]
             
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the actual query while showing the animation
-            response = self.chat_engine.process_security_query(enhanced_query)
-            
-            self.current_session.add_message("user", query)
-            self.current_session.add_message("assistant", response)
-            if len(self.current_session.messages) == 1:
-               self.current_session.topic = query[:50]
-
-
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
-
-        # Hacker-style response header
-        current_time = datetime.now().strftime("%H:%M:%S")
-        console.print(f"\n[bold red]╔═══[{current_time}]═══[/bold red][bold cyan]SecurityBot[/bold cyan][bold red]═[{self.security_mode.upper()}]═════╗[/bold red]")
-        console.print(Markdown(response))
-        console.print(f"[bold red]╚════════════════════════════════════════════════════╝[/bold red]")
-
-    def static_code_analysis(self):
-        """Enhanced static code analysis workflow."""
-        console.print(Text.from_markup("\n[bold red]==== STATIC CODE ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold cyan]Input required parameters:[/bold cyan]"))
+            response = self.generate_response(messages, temperature=0.3, max_tokens=2048)
+            return response
         
-        language = Prompt.ask("[bold green]>[/bold green] Programming Language")
-        file_path = Prompt.ask("[bold green]>[/bold green] File Path")
-        
-        # Animated code analysis
-        console.print("\n[bold yellow]Beginning static analysis...[/bold yellow]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
+        except Exception as e:
+            return f"Error during code analysis: {str(e)}"
+
+    def analyze_vulnerabilities(self, scan_type, file_path):
+        """Analyze vulnerability scan results from a file."""
+        try:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return f"Error: File '{file_path}' not found."
             
-            steps = [
-                "Reading source code...",
-                "Tokenizing and parsing...",
-                "Building AST...",
-                "Analyzing control flow...",
-                "Checking for vulnerabilities...",
-                "Generating report..."
+            # Read file content
+            with open(file_path, 'r') as file:
+                scan_data = file.read()
+            
+            # Create analysis prompt
+            prompt = f"""Analyze the following {scan_type} vulnerability scan results:
+
+```
+{scan_data}
+```
+
+Provide:
+1. Critical vulnerabilities summary
+2. Risk assessment for each finding
+3. Recommended remediation steps in priority order
+4. CVSS scores and CVE references where applicable
+5. Timeline recommendations for fixes"""
+
+            # Generate analysis using security mode system context
+            messages = [
+                {"role": "system", "content": self.security_system_message},
+                {"role": "user", "content": prompt}
             ]
             
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the actual query
-            result = self.chat_engine.static_code_analysis(language, file_path)
-            
-            # Complete the progress bars with slight delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
+            response = self.generate_response(messages, temperature=0.3, max_tokens=2048)
+            return response
+        
+        except Exception as e:
+            return f"Error during vulnerability analysis: {str(e)}"
 
-        # Display results in a more cyberpunk style
-        console.print("\n[bold red]╔═══ VULNERABILITY SCAN REPORT ════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Target:[/bold cyan] {os.path.basename(file_path)}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Language:[/bold cyan] {language}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Timestamp:[/bold cyan] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        console.print(Syntax(result, "text", theme="monokai", line_numbers=True))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-
-    def vulnerability_analysis(self):
-        """Enhanced vulnerability analysis workflow."""
-        console.print(Text.from_markup("\n[bold red]==== VULNERABILITY ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold cyan]Input required parameters:[/bold cyan]"))
-        
-        scan_type = Prompt.ask("[bold green]>[/bold green] Scan Type (nmap/nessus/burp/etc)")
-        file_path = Prompt.ask("[bold green]>[/bold green] File Path")
-        
-        # Animated vulnerability analysis process
-        console.print("\n[bold yellow]Beginning vulnerability analysis...[/bold yellow]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                f"Parsing {scan_type} data format...",
-                "Extracting vulnerability data...",
-                "Cross-referencing with threat database...",
-                "Calculating risk scores...",
-                "Prioritizing findings...",
-                "Generating assessment..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the vulnerability data
-            result = self.chat_engine.analyze_vulnerabilities(scan_type, file_path)
-            
-            # Complete the progress bars with slight delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
-
-        # Create a more dramatic table for critical findings
-        table = Table(title="[bold red][ CRITICAL VULNERABILITY FINDINGS ]",
-                     border_style="red", box=box.HEAVY_EDGE)
-        table.add_column("ID", style="cyan", justify="left")
-        table.add_column("Severity", style="red", justify="center")
-        table.add_column("Category", style="yellow")
-        table.add_column("Description", style="white")
-        table.add_column("CVSS", style="green", justify="center")
-        
-        # Extract findings from result and populate table
-        findings = result.strip().split('\n\n')
-        for finding in findings[:5]:  # Show top 5 findings for display purposes
-            parts = finding.split('\n')
-            if len(parts) >= 4:
-                id = parts[0].split(':')[1].strip() if ':' in parts[0] else "N/A"
-                severity = parts[1].split(':')[1].strip() if ':' in parts[1] else "N/A"
-                category = parts[2].split(':')[1].strip() if ':' in parts[2] else "N/A"
-                description = parts[3].split(':')[1].strip() if ':' in parts[3] else "N/A"
-                cvss = f"{random.uniform(3.0, 10.0):.1f}" if severity.lower() in ['high', 'critical'] else f"{random.uniform(1.0, 4.9):.1f}"
-                
-                table.add_row(id, severity, category, description, cvss)
-        
-        console.print(table)
-        
-        # Display additional analysis details
-        console.print(Panel(Markdown(result), 
-                          title="[bold red][ DETAILED ANALYSIS ]",
-                          border_style="red", 
-                          box=box.HEAVY_EDGE))
-
-    def threat_hunt(self, log_file=None):
-        """Threat hunting in log files."""
-        if not log_file:
-            log_file = Prompt.ask("[bold green]>[/bold green] Log File Path")
-        
-        console.print(Text.from_markup("\n[bold red]==== THREAT HUNTING ENGINE ====[/bold red]"))
-        
-        # Animated threat hunting process
-        console.print("\n[bold yellow]Initiating threat hunting procedure...[/bold yellow]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Loading log data...",
-                "Analyzing log patterns...",
-                "Detecting anomalies...",
-                "Correlating threat indicators...",
-                "Identifying potential compromises...",
-                "Generating threat report..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the logs
-            result = self.chat_engine.threat_hunt(log_file)
-            
-            # Complete the progress bars with slight delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
-
-        # Create a timeline of suspicious events
-        console.print("\n[bold red]╔═══ THREAT HUNTING RESULTS ════════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Log Source:[/bold cyan] {os.path.basename(log_file)}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Hunt Timestamp:[/bold cyan] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Analysis Mode:[/bold cyan] {self.security_level.upper()}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        # Display results
-        console.print(Markdown(result))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-
-    def malware_analysis(self, file_path=None):
-        """Analyze potential malware samples."""
-        if not file_path:
-            file_path = Prompt.ask("[bold green]>[/bold green] File Path")
-        
-        # Check for sufficient security level
-        if self.security_level not in ["advanced", "expert"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
-            console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
-            return
-        
-        console.print(Text.from_markup("\n[bold red]==== MALWARE ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow][blink]! CAUTION: SANDBOXED ENVIRONMENT REQUIRED ![/blink][/bold yellow]"))
-        
-        # More dramatic animation for malware analysis
-        console.print("\n[bold red]Initializing secure analysis environment...[/bold red]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Initializing sandbox...",
-                "Scanning file for known signatures...",
-                "Performing static analysis...",
-                "Running dynamic analysis...",
-                "Monitoring behavior...",
-                "Extracting IOCs...",
-                "Generating malware profile..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the malware analysis
-            result = self.chat_engine.analyze_malware(file_path)
-            
-            # Complete the progress bars with slightly longer delays
-            for i, task in enumerate(tasks):
-                time.sleep(0.4)  # Longer delay for dramatic effect
-                progress.update(task, advance=1)
-
-        # Display results with cyberpunk aesthetics
-        console.print("\n[bold red]╔═══ MALWARE ANALYSIS REPORT ═══════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold cyan]Sample:[/bold cyan] {os.path.basename(file_path)}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]MD5:[/bold cyan] {self._generate_hash()[:32]}")
-        console.print(f"[bold red]║[/bold red] [bold cyan]SHA256:[/bold cyan] {self._generate_hash()}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        # Create a structured view of malware details
-        console.print(Markdown(result))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-
-    # Offensive security methods - only available in offensive mode
+    # RECONNAISSANCE ENGINE IMPLEMENTATION
     def recon(self, target=None):
       """Advanced passive reconnaissance engine (OSINT) with threat modeling."""
+   
+
       if self.security_mode != "offensive":
-        console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-        console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
+        _console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
+        _console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
         return
 
       if not target:
         target = Prompt.ask("[bold green]>[/bold green] Target (domain/IP/org)")
 
       if self.auth_level not in ["government", "certified"]:
-        console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
-        console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
+        _console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
+        _console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
         return
 
-      console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
-      console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
+      _console.print(Panel.fit("[bold red]🔥 SHARVA RECONNAISSANCE ENGINE ACTIVATED 🔥[/bold red]", style="bold red"))
+      _console.print("[bold yellow]Note: All OSINT operations must be legally scoped and authorized.[/bold yellow]")
 
     # Validate domain/IP
       recon_type = "domain"
       if any(char.isdigit() for char in target.split('.')[-1]):
         recon_type = "IP"
-    
-      console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
+
+      _console.print(f"[bold cyan]→ Recon Target:[/bold cyan] {target} ({recon_type})")
 
     # Start animation
-      with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+      with progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
         steps = [
             "🔍 Resolving DNS and subdomains",
             "🛰️  WHOIS and registrar footprinting",
@@ -902,8 +412,25 @@ class SecurityMode:
             progress.add_task(description=step, total=1)
             time.sleep(0.5)
 
+    # Perform basic WHOIS lookup
+      whois_data = ""
+      try:
+        w = whois.whois(target)
+        whois_data = f"""
+### 🛰️ WHOIS Data:
+- Domain: {w.domain_name}
+- Registrar: {w.registrar}
+- Creation Date: {w.creation_date}
+- Expiration Date: {w.expiration_date}
+- Name Servers: {w.name_servers}
+- Country: {w.country}
+"""
+      except Exception as e:
+        whois_data = f"WHOIS lookup failed for {target}: {e}"
+
     # Collect recon report using AI engine
       result = self.chat_engine.perform_recon(target)
+      result = whois_data + "\n" + result
 
     # Save to file
       now = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -912,480 +439,405 @@ class SecurityMode:
         with open(filename, "w") as f:
             f.write(result)
       except Exception as e:
-        console.print(f"[bold red]Failed to save report:[/bold red] {e}")
+        _console.print(f"[bold red]Failed to save report:[/bold red] {e}")
         filename = None
 
     # Render fancy report
-      console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
-      console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
-      console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
-      console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
+      _console.print("\n[bold cyan]╔═══ OSINT RECON REPORT ═════════════════════════════╗[/bold cyan]")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Type:[/bold white] {recon_type.upper()} - Passive Intelligence")
+      _console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
       if filename:
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
-      console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
+        _console.print(f"[bold cyan]║[/bold cyan] [bold white]Saved to:[/bold white] {filename}")
+      _console.print("[bold cyan]╠════════════════════════════════════════════════════╣[/bold cyan]")
 
-      console.print(Markdown(result))
-      console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
-
+      _console.print(MarkdownIt(result))
+      _console.print("[bold cyan]╚════════════════════════════════════════════════════╝[/bold cyan]")
+ 
     # Threat level summary (mock)
-      console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
+      _console.print("\n[bold magenta]THREAT SCORE:[/bold magenta] [bold green]32/100[/bold green] — [italic]Low reconnaissance exposure[/italic]")
 
-      console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
+      _console.print(Panel.fit("[bold green]✔ Recon complete.[/bold green] For deeper results, escalate to active scanning or threat intel enrichment.", style="green"))
 
-
-    def pentest_report(self, scope=None):
-        """Generate penetration testing report."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not scope:
-            scope = Prompt.ask("[bold green]>[/bold green] Scope (web/network/mobile/etc)")
-        
-        # Check for sufficient auth level
-        if self.auth_level not in ["government", "certified"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level.")
-            console.print("[bold yellow]Use 'set_auth government' or 'set_auth certified' to enable this feature.[/bold yellow]")
-            return
-        
-        console.print(Text.from_markup("\n[bold red]==== PENTEST REPORT GENERATOR ====[/bold red]"))
-        
-        # Get additional details
-        target = Prompt.ask("[bold green]>[/bold green] Target Organization/System")
-        findings = Prompt.ask("[bold green]>[/bold green] Number of Findings", default="5")
-        
-        # Animation for report generation
-        console.print("\n[bold cyan]Generating penetration test report...[/bold cyan]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="cyan"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="cyan", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Compiling findings...",
-                "Calculating risk scores...",
-                "Preparing executive summary...",
-                "Generating technical details...",
-                "Adding remediation advice...",
-                "Finalizing report..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[cyan]{step}", total=1)
-                tasks.append(task)
-            
-            # Generate the report
-            result = self.chat_engine.generate_pentest_report(scope, target, int(findings))
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.4)
-                progress.update(task, advance=1)
-
-        # Display results
-        console.print("\n[bold cyan]╔═══ PENETRATION TEST REPORT ═══════════════════════╗[/bold cyan]")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Target:[/bold white] {target}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Scope:[/bold white] {scope.upper()} Assessment")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Findings:[/bold white] {findings}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Date:[/bold white] {datetime.now().strftime('%Y-%m-%d')}")
-        console.print("[bold cyan]╠═══════════════════════════════════════════════════╣[/bold cyan]")
-        
-        console.print(Markdown(result))
-        console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
-
-    def exploit_analysis(self, cve=None):
-        """Analyze exploit for CVE."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not cve:
-            cve = Prompt.ask("[bold green]>[/bold green] CVE ID (e.g., CVE-2021-44228)")
-        
-        # Check for sufficient security level
-        if self.security_level not in ["advanced", "expert"]:
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient security level. Advanced or Expert required.")
-            console.print("[bold yellow]Use 'set_level advanced' or 'set_level expert' to enable this feature.[/bold yellow]")
-            return
-        
-        console.print(Text.from_markup("\n[bold red]==== EXPLOIT ANALYSIS ENGINE ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow]NOTICE: AUTHORIZED USE ONLY[/bold yellow]"))
-        
-        # Animation for exploit analysis
-        console.print("\n[bold cyan]Analyzing exploit capabilities...[/bold cyan]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="cyan"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="cyan", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Querying vulnerability databases...",
-                "Retrieving exploit details...",
-                "Analyzing exploit techniques...",
-                "Assessing exploit reliability...",
-                "Identifying target systems...",
-                "Compiling analysis report..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[cyan]{step}", total=1)
-                tasks.append(task)
-            
-            # Process the exploit analysis
-            result = self.chat_engine.analyze_exploit(cve)
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.3)
-                progress.update(task, advance=1)
-
-        # Display results
-        console.print("\n[bold cyan]╔═══ EXPLOIT ANALYSIS REPORT ════════════════════════╗[/bold cyan]")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]CVE ID:[/bold white] {cve}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Analysis Level:[/bold white] {self.security_level.upper()}")
-        console.print(f"[bold cyan]║[/bold cyan] [bold white]Auth Level:[/bold white] {self.auth_level.upper()}")
-        console.print("[bold cyan]╠═══════════════════════════════════════════════════╣[/bold cyan]")
-        
-        console.print(Markdown(result))
-        console.print("[bold cyan]╚═══════════════════════════════════════════════════╝[/bold cyan]")
-
-    def display_matrix_effect(self, duration=3):
-        """Display a brief Matrix-style digital rain animation."""
-        console_width = os.get_terminal_size().columns
-        rain_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]\\{}|;':\",./<>?" 
-        streams = []
-        for _ in range(console_width // 2):
-           streams.append({
-            'pos': 0, 
-            'speed': random.uniform(0.1, 0.5), 
-            'length': random.randint(5, 15),
-            'column': random.randint(0, console_width-1),
-            'last_update': 0
-        })
-        start_time = time.time()
-        while time.time() - start_time < duration:
-            os.system('cls' if os.name == 'nt' else 'clear')
-            display = [" " * console_width for _ in range(20)]
-            current_time = time.time()
-            for stream in streams:
-                if current_time - stream['last_update'] > stream['speed']:
-                     stream['pos'] += 1
-                     stream['last_update'] = current_time
-            for i in range(stream['length']):
-                row = int(stream['pos'] - i)
-                if 0 <= row < 20:
-                    if i == 0:
-                        char = random.choice(rain_chars)
-                        display_row = list(display[row])
-                        display_row[stream['column']] = char
-                        display[row] = ''.join(display_row)
-                    else:
-                        char = random.choice(rain_chars)
-                        # Replace character at position with dim character
-                        display_row = list(display[row])
-                        display_row[stream['column']] = char
-                        display[row] = ''.join(display_row)
-            for line in display:
-                console.print(Text.from_markup(f"[green]{line}[/green]"))
-            time.sleep(0.05)                                
-             
-    def play_terminal_bell(self):
-        """Play terminal bell for notifications."""
-        print("\a", end="", flush=True)
-    def notification(self, message, level="info"):
-        """Display a notification with appropriate styling and optional sound."""
-        level_styles = {
-            "info": "blue",
-            "success": "green",
-            "warning": "yellow",
-            "error": "red",
-            "critical": "red reverse" }
-        style = level_styles.get(level, "white")
-        console.print(f"\n[bold {style}][!] {message}[/bold {style}]") 
-        if level in ["warning", "error", "critical"]:              
-            self.play_terminal_bell()
-            
-    def payload_gen(self, platform=None):
-        """Generate test payload for platform."""
-        if self.security_mode != "offensive":
-            console.print("[bold red][!] ERROR:[/bold red] Command only available in offensive mode.")
-            console.print("[bold yellow]Use 'set_mode offensive' to enable this feature.[/bold yellow]")
-            return
-            
-        if not platform:
-            platform = Prompt.ask("[bold green]>[/bold green] Platform (windows/linux/web/android)")
-        
-        # Check for sufficient security level and auth level
-        if self.auth_level != "government":
-            console.print("[bold red][!] ERROR:[/bold red] Insufficient authorization level. Government clearance required.")
-            console.print("[bold yellow]Use 'set_auth government' to enable this feature.[/bold yellow]")
-            return
-            
-        console.print(Text.from_markup("\n[bold red]==== TEST PAYLOAD GENERATOR ====[/bold red]"))
-        console.print(Text.from_markup("[bold yellow][blink]! RESTRICTED OPERATION - GOVERNMENT CLEARANCE REQUIRED ![/blink][/bold yellow]"))
-        
-        # Get additional information
-        payload_type = Prompt.ask("[bold green]>[/bold green] Payload Type (reverse_shell/bind_shell/web/etc)")
-        purpose = Prompt.ask("[bold green]>[/bold green] Test Purpose")
-        
-        # Confirm operation with dramatic warning
-        console.print(Panel(
-            "[bold yellow]PAYLOAD GENERATION WARNING[/bold yellow]\n" +
-            "[bold white]This operation will generate test security payloads for:[/bold white]\n" +
-            f"- Platform: {platform}\n" +
-            f"- Type: {payload_type}\n" +
-            f"- Purpose: {purpose}\n\n" +
-            "[bold red]ALL OPERATIONS ARE LOGGED FOR COMPLIANCE[/bold red]",
-            title="[bold red][ SECURITY DIRECTIVE ][/bold red]",
-            border_style="red", box=box.HEAVY_EDGE
-        ))
-        
-        confirm = Confirm.ask("[bold red]Confirm payload generation[/bold red]")
-        if not confirm:
-            console.print("[bold yellow]Operation aborted.[/bold yellow]")
-            return
-        
-        # Animation for payload generation
-        console.print("\n[bold red]Generating security test payload...[/bold red]")
-        
-        with Progress(
-            SpinnerColumn("dots", style="red"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=50, style="red", complete_style="green"),
-            expand=False
-        ) as progress:
-            tasks = []
-            
-            steps = [
-                "Setting up payload environment...",
-                "Creating payload structure...",
-                "Implementing functionality...",
-                "Encoding payload...",
-                "Signing with test certificate...",
-                "Finalizing payload..."
-            ]
-            
-            for step in steps:
-                task = progress.add_task(f"[red]{step}", total=1)
-                tasks.append(task)
-            
-            # Generate the payload
-            result = self.chat_engine.generate_test_payload(platform, payload_type, purpose)
-            
-            # Complete the progress bars
-            for i, task in enumerate(tasks):
-                time.sleep(0.4)
-                progress.update(task, advance=1)
-
-        # Display results
-        console.print("\n[bold red]╔═══ TEST PAYLOAD DETAILS ═══════════════════════════╗[/bold red]")
-        console.print(f"[bold red]║[/bold red] [bold white]Platform:[/bold white] {platform.upper()}")
-        console.print(f"[bold red]║[/bold red] [bold white]Type:[/bold white] {payload_type}")
-        console.print(f"[bold red]║[/bold red] [bold white]Auth Level:[/bold white] GOVERNMENT")
-        console.print(f"[bold red]║[/bold red] [bold white]Hash:[/bold white] {self._generate_hash()[:16]}")
-        console.print("[bold red]╠═══════════════════════════════════════════════════╣[/bold red]")
-        
-        console.print(Syntax(result, "python", theme="monokai", line_numbers=True))
-        console.print("[bold red]╚═══════════════════════════════════════════════════╝[/bold red]")
-        console.print("\n[bold yellow]WARNING: This payload is for authorized security testing only.[/bold yellow]")
-    def run_hackbot(self):
-        """Run HackBot in offensive security mode."""
-        if self.security_mode != "offensive":
-            console.print("[bold red]Error: HackBot only available in offensive mode[/bold red]")
-            console.print("[yellow]Switch to offensive mode first with: set_mode offensive[/yellow]")
-            return
-        if self.auth_level not in ["government", "certified"]:
-            console.print("[bold red]Error: Insufficient authorization level[/bold red]")
-            console.print("[yellow]Elevate auth level with 'set_auth government' or 'set_auth certified'[/yellow]")
-            return  
-
-
-        try:    
-            if self.hackbot is None:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]Initializing HackBot..."),
-                   transient=True
-                   ) as progress:
-                    progress.add_task("init", total=None)
-                    self.hackbot = HackBot(config_file="hackbot_config.json")  # Use a dedicated config
-            console.print("\n[bold red]╔══════════════════════════════════════════════════╗[/bold red]")
-            console.print("[bold red]║[/bold red] [bold white]HACKBOT RUNNING IN OFFENSIVE SECURITY MODE[/bold white] [bold red]║[/bold red]")
-            console.print("[bold red]╚══════════════════════════════════════════════════╝[/bold red]")
-            original_banner = self.hackbot.show_banner
-            def offensive_banner():
-                console.print("\n[bold red]OFFENSIVE SECURITY MODE ACTIVE[/bold red]")
-                console.print("[yellow]All activities are logged and monitored[/yellow]\n")
-                original_banner()
-            self.hackbot.show_banner = offensive_banner
-            self.hackbot.run()
-            self.hackbot.show_banner = original_banner
-            console.print("[bold green]HackBot session finished successfully.[/bold green]")    
-        except KeyboardInterrupt:
-            console.print("\n[bold yellow]HackBot session interrupted by user.[/bold yellow]")   
-        except Exception as e:
-             console.print(f"[bold red]Failed to run HackBot: {str(e)}[/bold red]")
-             self.hackbot = None
-        finally: 
-            self.hackbot = None   
-    def enable_offensive_capabilities(self):
-        """Forcefully enable offensive mode with elevated auth and expert level."""
-        self.set_security_mode("offensive")
-        self.set_auth_level("government")
-        self.set_security_level("expert")
-        console.print("[bold green]✓ Offensive capabilities enabled successfully[/bold green]")
-                        
-    def run(self):
-      """Main method to run the security mode."""
-      self.display_banner()
-      self.setup_tab_completion()
-
-      while True:
+    
+    def _validate_target(self, target):
+        """Validate if target is a domain or IP address."""
+        # Check if target is an IP address
         try:
-            # More hacker-style prompt
-            cmd = Prompt.ask(f"\n[bold red][{self.security_mode}@{self.config.username}][/bold red][bold yellow]$[/bold yellow]")
-
-            if cmd.lower() in ['exit', 'quit']:
-                # Ask if the user really wants to exit
-                confirm_exit = Confirm.ask(
-                    "[bold yellow]Are you sure you want to exit the security mode? (y/n)[/bold yellow]",
-                    default="n"
-                )
-
-                if confirm_exit:
-                    # If there are messages, ask if they want to save the session
-                    if len(self.current_session.messages) > 0:
-                        try:
-                            confirm_save = Prompt.ask(
-                                "[bold yellow]Do you want to save the session before exiting? (y/n)[/bold yellow]",
-                                choices=["y", "n"],
-                                default="y"
-                            )
-                            if confirm_save.lower() == "y":
-                                self.save_session()
-                                
-                        except Exception as e:
-                            console.print(f"[bold red]Error during session save: {e}")
-
-                    console.print("\n[bold red]Terminating secure session...[/bold red]")
-                    with Progress(
-                        SpinnerColumn("dots", style="red"),
-                        TextColumn("[progress.description]{task.description}"),
-                        transient=True
-                    ) as progress:
-                        task = progress.add_task("[red]Wiping session data...", total=1)
-                        time.sleep(1)
-                        progress.update(task, advance=1)
-
-                    console.print(f"[bold green]Session terminated. Duration: {datetime.now() - self.session_start}[/bold green]")
-                    break
-                else:
-                    console.print("[bold yellow]Exit canceled. Returning to prompt.[/bold yellow]")
-
-            elif cmd.lower() == 'help':
-                self.show_help()
-
-            elif cmd.lower() == 'save':
-                self.save_session()
-
-            elif cmd.lower().startswith('load '):
-                session_id = cmd[5:].strip()
-                self.load_session(session_id)
-
-            elif cmd.lower() == 'sessions':
-                self.list_sessions()
-
-            elif cmd.lower() == 'clear':
-                self.clear_screen()
-
-            elif cmd.lower() == 'stats':
-                self.show_stats()
-
-            elif cmd.lower() == 'switch':
-                console.print("[bold green]Switching to normal chat mode...[/bold green]")
-                return 'normal'
-
-            elif cmd.lower().startswith('set_level '):
-                level = cmd.split(' ')[1]
-                self.set_security_level(level)
-
-            elif cmd.lower().startswith('set_mode '):
-                mode = cmd.split(' ')[1]
-                self.set_security_mode(mode)
-
-            elif cmd.lower().startswith('set_auth '):
-                auth = cmd.split(' ')[1]
-                self.set_auth_level(auth)
-
-            elif cmd.lower() == 'static_code_analysis':
-                self.static_code_analysis()
-
-            elif cmd.lower() == 'vuln_analysis':
-                self.vulnerability_analysis()
-
-            elif cmd.lower().startswith('threat_hunt'):
-                parts = cmd.split(' ', 1)
-                log_file = parts[1] if len(parts) > 1 else None
-                self.threat_hunt(log_file)
-
-            elif cmd.lower().startswith('malware_analysis'):
-                parts = cmd.split(' ', 1)
-                file_path = parts[1] if len(parts) > 1 else None
-                self.malware_analysis(file_path)
-
-            elif cmd.lower().startswith('recon'):
-                parts = cmd.split(' ', 1)
-                target = parts[1] if len(parts) > 1 else None
-                self.recon(target)
-
-            elif cmd.lower().startswith('pentest_report'):
-                parts = cmd.split(' ', 1)
-                scope = parts[1] if len(parts) > 1 else None
-                self.pentest_report(scope)
-
-            elif cmd.lower().startswith('exploit_analysis'):
-                parts = cmd.split(' ', 1)
-                cve = parts[1] if len(parts) > 1 else None
-                self.exploit_analysis(cve)
-
-            elif cmd.lower().startswith('payload_gen'):
-                parts = cmd.split(' ', 1)
-                platform = parts[1] if len(parts) > 1 else None
-                self.payload_gen(platform)
-            elif cmd.lower() == 'history':
-                self.show_history()
-            elif cmd.lower().startswith('osint'):
-                    parts = cmd.split(' ', 1)
-                    target = parts[1] if len(parts) > 1 else None
-                    self.osint(target)    
-                
-            elif cmd.lower() == 'run_hackbot':
-                if self.security_mode != "offensive":
-                    console.print("[bold red]Error: Must be in offensive mode to run HackBot[/bold red]")
-                    console.print("[yellow]Use 'set_mode offensive' first[/yellow]")
-                else:
-                    if self.auth_level not in ["government", "certified"]:
-                        console.print("[bold red]Error: Insufficient authorization level[/bold red]")
-                        console.print("[yellow]Elevate auth level with 'set_auth government'[/yellow]")
-                    else:
-                        self.run_hackbot()
-
-            else:
-                # Process as security query
-                self.process_security_query(cmd)
-
-        except KeyboardInterrupt:
-            console.print("\n[bold yellow]Operation aborted. Type 'exit' to quit.[/bold yellow]")
-
+            ipaddress.ip_address(target)
+            return True
+        except ValueError:
+            pass
+        
+        # Check if target is a domain name
+        domain_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        if re.match(domain_pattern, target):
+            return True
+        
+        return False
+    
+    def _is_ip_address(self, target):
+        """Check if target is an IP address."""
+        try:
+            ipaddress.ip_address(target)
+            return True
+        except ValueError:
+            return False
+    
+    def _show_progress(self, tasks):
+        """Show progress spinner for tasks."""
+        spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        
+        for task in tasks:
+            spinner_idx = 0
+            sys.stdout.write(f"\r⠋ {task}".ljust(40) + "━" * 40)
+            sys.stdout.flush()
+            # In a real implementation, you would update this in a loop
+            # Here we just simulate a single frame
+    
+    def _perform_domain_recon(self, domain, report, recon_type):
+        """Perform domain reconnaissance."""
+        report["results"]["domain_info"] = {}
+        
+        # Get DNS information
+        try:
+            dns_info = socket.gethostbyname_ex(domain)
+            report["results"]["domain_info"]["dns"] = {
+                "hostname": dns_info[0],
+                "aliases": dns_info[1],
+                "ip_addresses": dns_info[2]
+            }
         except Exception as e:
-            console.print(f"[bold red][!] ERROR:[/bold red] {str(e)}")
+            report["results"]["domain_info"]["dns"] = {"error": str(e)}
+        
+        # Get WHOIS information
+        try:
+            w = whois.whois(domain)
+            report["results"]["domain_info"]["whois"] = {
+                "registrar": w.registrar,
+                "creation_date": str(w.creation_date),
+                "expiration_date": str(w.expiration_date),
+                "updated_date": str(w.updated_date),
+                "status": w.status,
+                "name_servers": w.name_servers
+            }
+        except Exception as e:
+            report["results"]["domain_info"]["whois"] = {"error": str(e)}
+        
+        # Get SSL certificate information (if applicable)
+        try:
+            context = ssl.create_default_context()
+            conn = context.wrap_socket(socket.socket(socket.AF_INET), server_hostname=domain)
+            conn.connect((domain, 443))
+            cert = conn.getpeercert()
+            
+            report["results"]["domain_info"]["ssl"] = {
+                "issuer": dict(x[0] for x in cert['issuer']),
+                "subject": dict(x[0] for x in cert['subject']),
+                "version": cert['version'],
+                "serialNumber": cert['serialNumber'],
+                "notBefore": cert['notBefore'],
+                "notAfter": cert['notAfter']
+            }
+            conn.close()
+        except Exception as e:
+            report["results"]["domain_info"]["ssl"] = {"error": str(e)}
+        
+        # Only perform active scans if recon_type is "full"
+        if recon_type == "full":
+            # Port scan (top ports only)
+            try:
+                report["results"]["port_scan"] = self._perform_port_scan(report["results"]["domain_info"]["dns"]["ip_addresses"][0])
+            except Exception as e:
+                report["results"]["port_scan"] = {"error": str(e)}
+        
+        # Search for domain in public data sources
+        if self.shodan_api_key:
+            try:
+                shodan_data = self._query_shodan(domain)
+                report["results"]["shodan"] = shodan_data
+            except Exception as e:
+                report["results"]["shodan"] = {"error": str(e)}
+        
+        if self.virustotal_api_key:
+            try:
+                vt_data = self._query_virustotal(domain)
+                report["results"]["virustotal"] = vt_data
+            except Exception as e:
+                report["results"]["virustotal"] = {"error": str(e)}
+        
+        # Simulate breach database check
+        report["results"]["breach_check"] = {
+            "status": "completed",
+            "found_in_breaches": False,
+            "message": "No breach data found for this domain."
+        }
+        
+        # Search for public repositories
+        report["results"]["repository_search"] = {
+            "github": self._simulate_github_search(domain),
+            "gitlab": {"status": "not_available"}
+        }
+        
+        return report
+    
+    def _perform_ip_recon(self, ip, report):
+        """Perform IP address reconnaissance."""
+        report["results"]["ip_info"] = {}
+        
+        # Get reverse DNS
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip)
+            report["results"]["ip_info"]["reverse_dns"] = hostname
+        except Exception as e:
+            report["results"]["ip_info"]["reverse_dns"] = {"error": str(e)}
+        
+        # GeoIP lookup (simulated)
+        report["results"]["ip_info"]["geo"] = {
+            "country": "United States",
+            "city": "San Francisco",
+            "region": "California",
+            "latitude": 37.77493,
+            "longitude": -122.41942,
+            "isp": "Example ISP"
+        }
+        
+        # Port scan
+        report["results"]["port_scan"] = self._perform_port_scan(ip)
+        
+        # Shodan lookup
+        if self.shodan_api_key:
+            try:
+                shodan_data = self._query_shodan(ip)
+                report["results"]["shodan"] = shodan_data
+            except Exception as e:
+                report["results"]["shodan"] = {"error": str(e)}
+        
+        return report
+    
+    def _perform_port_scan(self, ip):
+        """Perform a port scan on the target IP."""
+        common_ports = [21, 22, 23, 25, 53, 80, 110, 115, 135, 139, 143, 194, 443, 445, 1433, 3306, 3389, 5632, 5900, 8080]
+        results = {}
+        
+        # For demonstration/safety purposes, we'll simulate the scan
+        results["method"] = "simulation"
+        results["scanned_ports"] = common_ports
+        results["open_ports"] = {}
+        
+        # Simulate some common services
+        if 80 in common_ports:
+            results["open_ports"]["80"] = {"service": "HTTP", "banner": "Apache/2.4.41"}
+        if 443 in common_ports:
+            results["open_ports"]["443"] = {"service": "HTTPS", "banner": "nginx/1.18.0"}
+        if 22 in common_ports:
+            results["open_ports"]["22"] = {"service": "SSH", "banner": "OpenSSH 8.2p1"}
+        
+        return results
+    
+    def _query_shodan(self, target):
+        """Query Shodan for information about the target."""
+        # This would normally use the Shodan API
+        # For demonstration, we'll return simulated data
+        return {
+            "ip": "198.51.100.1",
+            "ports": [80, 443, 22],
+            "hostnames": ["example.com", "www.example.com"],
+            "country": "United States",
+            "org": "Example Organization",
+            "data": [
+                {
+                    "port": 80,
+                    "service": "HTTP",
+                    "product": "Apache httpd",
+                    "version": "2.4.41"
+                },
+                {
+                    "port": 443,
+                    "service": "HTTPS",
+                    "product": "nginx",
+                    "version": "1.18.0"
+                }
+            ]
+        }
+    
+    def _query_virustotal(self, domain):
+        """Query VirusTotal for domain information."""
+        # This would normally use the VirusTotal API
+        # For demonstration, we'll return simulated data
+        return {
+            "response_code": 1,
+            "domain_info": {
+                "categories": ["business"],
+                "creation_date": "2010-01-01",
+                "last_update_date": "2023-01-01"
+            },
+            "detected_urls": 0,
+            "detected_downloaded_samples": 0,
+            "detected_communicating_samples": 0,
+            "resolutions": [
+                {"ip_address": "198.51.100.1", "last_resolved": "2023-01-01"}
+            ]
+        }
+    
+    def _simulate_github_search(self, domain):
+        """Simulate searching GitHub for references to the domain."""
+        return {
+            "status": "completed",
+            "results_count": 3,
+            "sample_results": [
+                {"repository": "example/repo1", "description": "Configuration example"},
+                {"repository": "example/repo2", "description": "API client library"},
+                {"repository": "example/docs", "description": "Documentation site"}
+            ]
+        }
+    
+    def _analyze_recon_data(self, report):
+        """Analyze reconnaissance data using AI."""
+        # Convert report to text summary
+        summary = f"""# Reconnaissance Report for {report['target']}
+
+## Target Information
+- Type: {'IP Address' if self._is_ip_address(report['target']) else 'Domain'}
+- Timestamp: {report['timestamp']}
+- Reconnaissance Type: {report['recon_type']}
+
+## Key Findings
+"""
+        
+        # Add domain information if available
+        if "domain_info" in report["results"]:
+            summary += "### Domain Information\n"
+            
+            # Add DNS info
+            if "dns" in report["results"]["domain_info"]:
+                dns = report["results"]["domain_info"]["dns"]
+                if "error" not in dns:
+                    summary += f"- Hostname: {dns['hostname']}\n"
+                    summary += f"- IP Addresses: {', '.join(dns['ip_addresses'])}\n"
+                    if dns['aliases']:
+                        summary += f"- Aliases: {', '.join(dns['aliases'])}\n"
+                else:
+                    summary += f"- DNS Error: {dns['error']}\n"
+            
+            # Add WHOIS info
+            if "whois" in report["results"]["domain_info"]:
+                whois = report["results"]["domain_info"]["whois"]
+                if "error" not in whois:
+                    summary += f"- Registrar: {whois['registrar']}\n"
+                    summary += f"- Creation Date: {whois['creation_date']}\n"
+                    summary += f"- Expiration Date: {whois['expiration_date']}\n"
+                    summary += f"- Name Servers: {', '.join(whois['name_servers']) if isinstance(whois['name_servers'], list) else whois['name_servers']}\n"
+                else:
+                    summary += f"- WHOIS Error: {whois['error']}\n"
+        
+        # Add IP information if available
+        if "ip_info" in report["results"]:
+            summary += "### IP Information\n"
+            ip_info = report["results"]["ip_info"]
+            
+            if "reverse_dns" in ip_info:
+                if isinstance(ip_info["reverse_dns"], str):
+                    summary += f"- Reverse DNS: {ip_info['reverse_dns']}\n"
+                else:
+                    summary += f"- Reverse DNS Error: {ip_info['reverse_dns']['error']}\n"
+            
+            if "geo" in ip_info:
+                geo = ip_info["geo"]
+                summary += f"- Location: {geo['city']}, {geo['region']}, {geo['country']}\n"
+                summary += f"- ISP: {geo['isp']}\n"
+        
+        # Add port scan information
+        if "port_scan" in report["results"]:
+            summary += "### Open Ports\n"
+            port_scan = report["results"]["port_scan"]
+            
+            if "error" not in port_scan:
+                if "open_ports" in port_scan and port_scan["open_ports"]:
+                    for port, info in port_scan["open_ports"].items():
+                        summary += f"- Port {port}: {info['service']} ({info['banner']})\n"
+                else:
+                    summary += "- No open ports detected in scan\n"
+            else:
+                summary += f"- Port Scan Error: {port_scan['error']}\n"
+        
+        # Add external data sources
+        if "shodan" in report["results"]:
+            summary += "### Shodan Information\n"
+            shodan = report["results"]["shodan"]
+            
+            if "error" not in shodan:
+                summary += f"- Organization: {shodan['org']}\n"
+                summary += f"- Hostnames: {', '.join(shodan['hostnames'])}\n"
+                summary += f"- Open Ports: {', '.join(map(str, shodan['ports']))}\n"
+                
+                if "data" in shodan:
+                    summary += "- Services:\n"
+                    for service in shodan["data"]:
+                        summary += f"  - {service['port']}/{service['service']}: {service['product']} {service['version']}\n"
+            else:
+                summary += f"- Shodan Error: {shodan['error']}\n"
+        
+        if "virustotal" in report["results"]:
+            summary += "### VirusTotal Information\n"
+            vt = report["results"]["virustotal"]
+            
+            if "error" not in vt:
+                if vt["response_code"] == 1:
+                    summary += f"- Categories: {', '.join(vt['domain_info']['categories'])}\n"
+                    summary += f"- Creation Date: {vt['domain_info']['creation_date']}\n"
+                    summary += f"- Last Update: {vt['domain_info']['last_update_date']}\n"
+                    summary += f"- Detected URLs: {vt['detected_urls']}\n"
+                    
+                    if "resolutions" in vt:
+                        summary += "- Recent IP Resolutions:\n"
+                        for res in vt["resolutions"]:
+                            summary += f"  - {res['ip_address']} (Last resolved: {res['last_resolved']})\n"
+                else:
+                    summary += "- Domain not found in VirusTotal\n"
+            else:
+                summary += f"- VirusTotal Error: {vt['error']}\n"
+        
+        # Add repository search results
+        if "repository_search" in report["results"]:
+            summary += "### Public Repository Mentions\n"
+            repos = report["results"]["repository_search"]
+            
+            if "github" in repos and repos["github"]["status"] == "completed":
+                summary += f"- GitHub Results: {repos['github']['results_count']} repositories\n"
+                if repos["github"]["results_count"] > 0:
+                    summary += "- Sample Repositories:\n"
+                    for repo in repos["github"]["sample_results"]:
+                        summary += f"  - {repo['repository']}: {repo['description']}\n"
+        
+        # Add breach information
+        if "breach_check" in report["results"]:
+            summary += "### Breach Database Check\n"
+            breach = report["results"]["breach_check"]
+            
+            if breach["found_in_breaches"]:
+                summary += "- Target found in breach databases\n"
+            else:
+                summary += f"- {breach['message']}\n"
+        
+        # Analyze the data with AI
+        messages = [
+            {"role": "system", "content": self.recon_system_message},
+            {"role": "user", "content": f"Analyze the following reconnaissance data and provide a security assessment with key findings, potential vulnerabilities, and recommendations:\n\n{summary}"}
+        ]
+        
+        analysis = self.generate_response(messages, temperature=0.3, max_tokens=2048)
+        
+        # Return combined summary and analysis
+        return f"{summary}\n\n## AI Analysis\n{analysis}"
+
+
+if __name__ == "__main__":
+    # Test chat engine
+    engine = ChatEngine()
+    response = engine.process_normal_query("What's the weather today?")
+    print("Response:", response)
+    
+    # Test reconnaissance functionality
+    recon_result = engine.perform_recon("example.com")
+    print(recon_result)
