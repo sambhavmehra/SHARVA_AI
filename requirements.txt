@@ -1,0 +1,14 @@
+rich
+python-whois
+dotenv
+groq
+markdown-it
+requests
+whois
+ipaddress
+prompt-toolkit
+python-dotenv
+huggingface-hub
+langchain
+llama-cpp-python
+googlesearch-python
