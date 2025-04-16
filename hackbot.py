@@ -851,16 +851,81 @@ For support or feedback, please contact:
     def set_config(self, setting: str = None, value: str = None):
       """Change a configuration setting."""
       try:
+        # If no setting provided, list available settings
         if not setting:
-            setting = Prompt.ask("Enter setting name")
+            # Display available settings
+            console.print("Available settings:" if not USE_RICH else "[cyan]Available settings:[/cyan]")
+            
+            # Group settings by category for better organization
+            basic_settings = ['ai_mode', 'temperature', 'max_tokens', 'top_p', 'top_k', 'repetition_penalty']
+            model_settings = ['model_name', 'model_basename', 'groq_model', 'system_prompt']
+            file_settings = ['data_dir', 'history_file']
+            api_settings = ['groq_api_key']
+            
+            # Display basic settings
+            console.print("Basic settings:" if not USE_RICH else "[green]Basic settings:[/green]")
+            for s in basic_settings:
+                if s in self.config:
+                    value_display = '******' if 'key' in s.lower() else self.config[s]
+                    console.print(f"  - {s}: {value_display}" if not USE_RICH else f"  - [bold]{s}[/bold]: {value_display}")
+            
+            # Display model settings
+            console.print("\nModel settings:" if not USE_RICH else "[green]Model settings:[/green]")
+            for s in model_settings:
+                if s in self.config:
+                    current_value = self.config[s]
+                    # Truncate long system prompts
+                    if s == 'system_prompt' and len(str(current_value)) > 50:
+                        current_value = str(current_value)[:50] + "..."
+                    console.print(f"  - {s}: {current_value}" if not USE_RICH else f"  - [bold]{s}[/bold]: {current_value}")
+            
+            # Display file settings
+            console.print("\nFile settings:" if not USE_RICH else "[green]File settings:[/green]")
+            for s in file_settings:
+                if s in self.config:
+                    console.print(f"  - {s}: {self.config[s]}" if not USE_RICH else f"  - [bold]{s}[/bold]: {self.config[s]}")
+            
+            # Display API settings (hide actual keys)
+            console.print("\nAPI settings:" if not USE_RICH else "[green]API settings:[/green]")
+            for s in api_settings:
+                if s in self.config:
+                    console.print(f"  - {s}: {'*****' if self.config[s] else 'Not set'}" if not USE_RICH else 
+                                 f"  - [bold]{s}[/bold]: {'*****' if self.config[s] else '[red]Not set[/red]'}")
+            
+            # Other settings not categorized
+            other_settings = [s for s in self.config if s not in basic_settings + model_settings + file_settings + api_settings]
+            if other_settings:
+                console.print("\nOther settings:" if not USE_RICH else "[green]Other settings:[/green]")
+                for s in other_settings:
+                    console.print(f"  - {s}: {self.config[s]}" if not USE_RICH else f"  - [bold]{s}[/bold]: {self.config[s]}")
+            
+            setting = Prompt.ask("\nEnter setting name to change")
         
         if setting not in self.config:
-            console.print(f"Error: Setting '{setting}' not found in configuration" if not USE_RICH else f"[red]Error:[/red] Setting '{setting}' not found in configuration")
+            console.print(f"Error: Setting '{setting}' not found in configuration" if not USE_RICH else 
+                         f"[red]Error:[/red] Setting '{setting}' not found in configuration")
             return
+        
+        # Display current value and type information
+        current_value = self.config[setting]
+        current_type = type(current_value).__name__
+        
+        # Show type-specific guidance
+        type_guidance = ""
+        if current_type == "bool":
+            type_guidance = "(Enter 'true', 'yes', '1', 'y' for True; anything else for False)"
+        elif current_type == "int":
+            type_guidance = "(Enter an integer)"
+        elif current_type == "float":
+            type_guidance = "(Enter a decimal number)"
+        
+        console.print(f"Current value of '{setting}': {current_value} ({current_type}) {type_guidance}" if not USE_RICH else
+                     f"Current value of '[bold]{setting}[/bold]': [cyan]{current_value}[/cyan] ([italic]{current_type}[/italic]) {type_guidance}")
         
         if not value:
             value = Prompt.ask(f"Enter new value for {setting}", default=str(self.config[setting]))
         
+        # Convert value to correct type
         current_type = type(self.config[setting])
         if current_type == bool:
             value = value.lower() in ('true', 'yes', '1', 'y')
@@ -869,11 +934,24 @@ For support or feedback, please contact:
         elif current_type == float:
             value = float(value)
         
+        # Update config
         self.config[setting] = value
-        console.print(f"Successfully updated {setting} to {value}" if not USE_RICH else f"[green]Successfully updated {setting} to {value}[/green]")
+        console.print(f"Successfully updated {setting} to {value}" if not USE_RICH else 
+                     f"[green]Successfully updated [bold]{setting}[/bold] to [cyan]{value}[/cyan][/green]")
         
+        # Special handling for certain settings
         if setting == 'ai_mode':
             self._init_llm()
+        elif setting == 'groq_api_key' and self.config['ai_mode'] == AIMode.GROQ.value:
+            console.print("API key updated. Testing connection..." if not USE_RICH else 
+                         "[yellow]API key updated. Testing connection...[/yellow]")
+            # Simple test to verify the API key works
+            try:
+                test_response = self._groq_api("Hello")
+                console.print("API key valid!" if not USE_RICH else "[bold green]API key valid![/bold green]")
+            except Exception as e:
+                console.print(f"API key may be invalid: {str(e)}" if not USE_RICH else 
+                             f"[red]API key may be invalid:[/red] {str(e)}")
             
       except Exception as e:
         logger.error(f"Error setting config: {e}")
