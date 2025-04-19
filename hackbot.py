@@ -10,7 +10,8 @@ from typing import Dict, List, Any, Optional
 from enum import Enum
 from datetime import datetime
 from dataclasses import dataclass, asdict, field
-
+from realtime_engine import RealTimeEngine
+from chat_engine import ChatEngine
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("hackbot")
@@ -97,7 +98,8 @@ class HackBot:
         os.makedirs(self.config['data_dir'], exist_ok=True)
         self._load_chat_history()
         self._init_llm()
-        
+        self.chat_engine = ChatEngine()
+        self.realtime_engine = RealTimeEngine(self.chat_engine)
         # Register commands
         self._commands = self._register_commands()
 
@@ -481,32 +483,48 @@ class HackBot:
         return result["choices"][0]["message"]["content"]
 
     def process_query(self, query: str):
-        """Process a user query and return formatted response."""
-        try:
-            console.print("Processing query..." if not USE_RICH else "[cyan]Processing query...[/cyan]")
-            
+      """Process a user query and return formatted response."""
+      try:
+        console.print("Processing query..." if not USE_RICH else "[cyan]Processing query...[/cyan]")
+        
+        # Identify query category
+        category = self.realtime_engine.identify_query_category(query)
+        # Check if query is related to hacking/cybersecurity or explicitly real-time
+        is_hacking_cybersecurity = category in [
+            "cybersecurity", "vulnerabilities", "threat_intelligence", 
+            "ethical_hacking", "security_tools", "hacking"  # Added "hacking"
+        ]
+        is_realtime = self.realtime_engine.is_realtime_query(query) or is_hacking_cybersecurity
+        
+        if is_realtime:
+            console.print("Processing as real-time query (hacking/cybersecurity or time-sensitive)." 
+                         if not USE_RICH else 
+                         "[blue]Processing as real-time query (hacking/cybersecurity or time-sensitive).[/blue]")
+            response = self.realtime_engine.process_realtime_query(query, mode="normal", category=category)
+        else:
             response = self.get_ai_response(query)
-            
-            self.chat_history.append(ChatEntry(
-                query=query,
-                response=response,
-                metadata={
-                    'mode': self.config['ai_mode'],
-                    'model': self.config['groq_model'] if self.config['ai_mode'] == AIMode.GROQ.value else self.config['model_name'],
-                    'timestamp': datetime.now().isoformat()
-                }
-            ))
-            
-            console.print("Response ready!" if not USE_RICH else "[green]Response ready![/green]")
-            self.format_response(response)
-            
-        except Exception as e:
-            logger.error(f"Error processing query: {e}")
-            error_msg = f"Error processing query: {str(e)}"
-            if USE_RICH:
-                console.print(Panel(error_msg, title="Processing Error", border_style="red"))
-            else:
-                print(error_msg)
+        
+        self.chat_history.append(ChatEntry(
+            query=query,
+            response=response,
+            metadata={
+                'mode': self.config['ai_mode'],
+                'model': self.config['groq_model'] if self.config['ai_mode'] == AIMode.GROQ.value else self.config['model_name'],
+                'timestamp': datetime.now().isoformat(),
+                'category': category if is_realtime else 'general'
+            }
+        ))
+        
+        console.print("Response ready!" if not USE_RICH else "[green]Response ready![/green]")
+        self.format_response(response, title=f"RealTime Query: {query}" if is_realtime else query)
+        
+      except Exception as e:
+        logger.error(f"Error processing query: {e}")
+        error_msg = f"Error processing query: {str(e)}"
+        if USE_RICH:
+            console.print(Panel(error_msg, title="Processing Error", border_style="red"))
+        else:
+            print(error_msg)
 
     def format_response(self, response: str, title: str = "AI Response"):
         """Format the AI response."""
