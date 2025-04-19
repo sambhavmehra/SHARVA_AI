@@ -19,8 +19,8 @@ import shutil
 from hackbot import HackBot
 from session import Session
 from session_name import Session
-from osint import PersonOSINT, integrate_person_osint
-
+from osint import PersonOSINT 
+from realtime_engine import RealTimeEngine
 console = Console()
 
 class SecurityMode:
@@ -42,7 +42,8 @@ class SecurityMode:
         from chat_engine import ChatEngine
         self.chat_engine = ChatEngine(config)
         self.osint_module = PersonOSINT(chat_engine=self.chat_engine, config=config)
-
+        self.realtime_engine = RealTimeEngine(self.chat_engine)
+        
     def display_banner(self):
        """Display an enhanced security mode banner for SHARVA."""
        blink = "\033[5m"
@@ -586,6 +587,13 @@ class SecurityMode:
     def process_security_query(self, query):
         """Process security query with enhanced feedback."""
         self.query_count += 1
+        if self.realtime_engine.is_realtime_query(query):
+          console.print("[bold cyan]🛰️ Real-Time Query Detected in Security Mode[/bold cyan]")
+          response = self.realtime_engine.process_realtime_query(query, mode="security")
+          self.current_session.add_message("user", query)
+          self.current_session.add_message("assistant", response)
+          console.print(Markdown(response))
+          return
 
         # Add contextual information about current mode
         mode_context = f"Current mode: {self.security_mode}. Security level: {self.security_level}. "
@@ -1257,6 +1265,32 @@ class SecurityMode:
             # More hacker-style prompt
             cmd = Prompt.ask(f"\n[bold red][{self.security_mode}@{self.config.username}][/bold red][bold yellow]$[/bold yellow]")
 
+            # Check if it's a real-time query
+            if self.realtime_engine.is_realtime_query(cmd):
+                console.print(f"\n[bold red][[/bold red] [bold white]PROCESSING REAL-TIME SECURITY QUERY[/bold white] [bold red]][/bold red]")
+                with Progress(
+                    SpinnerColumn("dots", style="red"),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(bar_width=50, style="red", complete_style="green"),
+                    expand=False
+                ) as progress:
+                    task = progress.add_task("[red]Fetching real-time data...", total=1)
+                    response = self.realtime_engine.process_realtime_query(cmd, mode="security")
+                    progress.update(task, advance=1)
+
+                # Display response
+                console.print(f"\n[bold red]╔═══[{datetime.now().strftime('%H:%M:%S')}]═══[/bold red][bold cyan]SecurityBot[/bold cyan][bold red]═[{self.security_mode.upper()}]═════╗[/bold red]")
+                console.print(Markdown(response))
+                console.print(f"[bold red]╚════════════════════════════════════════════════════╝[/bold red]")
+
+                # Save to session
+                self.current_session.add_message("user", cmd)
+                self.current_session.add_message("assistant", response)
+                if len(self.current_session.messages) == 1:
+                    self.current_session.topic = cmd[:50]
+                self.query_count += 1
+                continue
+
             if cmd.lower() in ['exit', 'quit']:
                 # Ask if the user really wants to exit
                 confirm_exit = Confirm.ask(
@@ -1364,13 +1398,15 @@ class SecurityMode:
                 parts = cmd.split(' ', 1)
                 platform = parts[1] if len(parts) > 1 else None
                 self.payload_gen(platform)
+
             elif cmd.lower() == 'history':
                 self.show_history()
+
             elif cmd.lower().startswith('osint'):
-                    parts = cmd.split(' ', 1)
-                    target = parts[1] if len(parts) > 1 else None
-                    self.osint(target)    
-                
+                parts = cmd.split(' ', 1)
+                target = parts[1] if len(parts) > 1 else None
+                self.osint(target)
+
             elif cmd.lower() == 'run_hackbot':
                 if self.security_mode != "offensive":
                     console.print("[bold red]Error: Must be in offensive mode to run HackBot[/bold red]")
