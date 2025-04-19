@@ -35,7 +35,10 @@ class ChatEngine:
         
         # Load environment variables
         self.env_vars = dotenv_values(".env")
-        
+        self.search_system_message = {
+            "role": "system",
+            "content": "You are a smart assistant. Use the search results and current time below to answer the user's query accurately."
+        }
         # Set up configuration
         self.username = self.env_vars.get("Username", "Sambhav Mehra")
         self.assistant_name = self.env_vars.get("Assistantname", "Sharva")
@@ -138,7 +141,7 @@ Remember: All advice should focus on defensive security, vulnerability remediati
 
     def _create_search_system_message(self):
         """Create system message for search mode."""
-        return f"""Hello, I am {self.username}. You are an exceptionally advanced and intelligent AI assistant named {self.assistant_name}, designed to function like a real-time, interactive system.
+        return f"""Hello, I am {self.username}. You are a smart assistant. Use the search results and current time below to answer the user's query accurately. {self.assistant_name}, designed to function like a real-time, interactive system.
 
 1. Use the real-time search results provided between [start] and [end] tags for up-to-date information
 2. Refer to the current date and time when relevant
@@ -149,7 +152,7 @@ Remember: All advice should focus on defensive security, vulnerability remediati
 
 Always prioritize accuracy and clarity in your responses based on the search results provided.
 """
-
+    
     def _create_recon_system_message(self):
         """Create system message for reconnaissance mode."""
         return f"""Hello, I am {self.username}. You are an advanced OSINT and reconnaissance AI assistant. Your primary function is to analyze and interpret technical reconnaissance data including:
