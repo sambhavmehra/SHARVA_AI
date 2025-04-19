@@ -1,3 +1,4 @@
+from logging import config
 import os
 import sys
 import json
@@ -22,8 +23,8 @@ from prompt_toolkit.shortcuts import clear as pt_clear
 from prompt_toolkit.key_binding import KeyBindings
 from config import Config
 from session_name import Session as NamedSession
-
-
+from realtime_engine import RealTimeEngine
+from chat_engine import ChatEngine
 # Define custom theme
 custom_theme = Theme({
     "info": "cyan",
@@ -44,6 +45,11 @@ class Message:
         self.sender = sender
         self.content = content
         self.timestamp = timestamp or datetime.now()
+       
+        
+      
+    # Initialize RealTimeEngine
+     
     
     def to_dict(self) -> Dict:
         """Convert message to dictionary for serialization."""
@@ -129,6 +135,7 @@ class NormalMode:
         from chat_engine import ChatEngine
         self.chat_engine = ChatEngine(config)
         
+        self.realtime_engine = RealTimeEngine(self.chat_engine)
         # Create command completer
         self.commands = [
     "quit", "exit", "clear", "help", "switch", "search",
@@ -274,7 +281,24 @@ class NormalMode:
             border_style=self.current_theme['banner_color'],
             box=box.ROUNDED
         ))
-    
+    # Add this inside NormalMode class in normal_mode.py
+    def handle_user_query(self, query: str):
+      """Process user query, including real-time handling."""
+      if self.realtime_engine.is_realtime_query(query):
+        console.print("[bold cyan]🛰️ Real-Time Query Detected in Normal Mode[/bold cyan]")
+        response = self.realtime_engine.process_realtime_query(query, mode="normal")
+        self.current_session.add_message("user", query)
+        self.current_session.add_message("assistant", response)
+        console.print(Markdown(response))
+        return
+
+    # Fallback to normal AI processing
+      response = self.chat_engine.process_normal_query(query)
+      self.current_session.add_message("user", query)
+      self.current_session.add_message("assistant", response)
+      console.print(Markdown(response))
+
+
     def show_keyboard_shortcuts(self):
         """Display keyboard shortcuts."""
         shortcuts = Table(title="Keyboard Shortcuts", box=box.SIMPLE)
@@ -377,94 +401,118 @@ class NormalMode:
             console.print(f"[error]Error exporting conversation: {str(e)}[/error]")
     
     def run(self):
-        """Run the normal mode interface."""
-        self.clear_screen()
-        
-        while True:
-            try:
-                # Get user input with command completion and history
-                user_input = self.prompt_session.prompt(
-                    f"You :",
-                    key_bindings=self.kb,
-                    mouse_support=True
-                )
-                
-                # Add user message to session
-                self.current_session.add_message("user", user_input)
-                if len(self.current_session.messages) == 1:
-                  self.current_session.topic = user_input[:50]
+      """Run the normal mode interface."""
+      self.clear_screen()
+      self.display_banner()
+    
+      while True:
+        try:
+            # Get user input with command completion and history
+            user_input = self.prompt_session.prompt(
+                f"You :",
+                key_bindings=self.kb,
+                mouse_support=True
+            )
+            
+            # Add user message to session
+            self.current_session.add_message("user", user_input)
+            if len(self.current_session.messages) == 1:
+                self.current_session.topic = user_input[:50]
 
-                # Process commands
-                if user_input.lower() in ['quit', 'exit']:
-                    # Ask if user wants to save before quitting
-                    if len(self.current_session.messages) > 1:
-                        save_confirm = Prompt.ask(
-                            "[warning]Save this session before quitting? (y/n)[/warning]",
-                            choices=["y", "n"], default="y"
-                        )
-                        if save_confirm.lower() == 'y':
-                            self.save_current_session()
-                    
-                    console.print("[warning]Goodbye![/warning]")
-                    break
-                    
-                elif user_input.lower() == 'clear':
-                    self.clear_screen()
-                    
-                elif user_input.lower() == 'help':
-                    self.show_help()
-                    
-                elif user_input.lower() == 'keyboard':
-                    self.show_keyboard_shortcuts()
-                    
-                elif user_input.lower() == 'switch':
-                    console.print("[warning]Switching to security mode...[/warning]")
-                    return "security"
-                    
-                elif user_input.lower().startswith('search '):
-                    query = user_input[7:].strip()  # Remove 'search ' prefix
-                    if query:
-                        response_panel = Panel(
-                            "",
-                            title=f"[{self.current_theme['assistant_color']}]Assistant[/{self.current_theme['assistant_color']}]",
-                            border_style=self.current_theme['assistant_color'],
-                            expand=False
-                        )
-                        console.print("\n")
-                        console.print(response_panel)
-                        
-                        with console.status(f"[success]Searching for information...[/success]"):
-                            response = self.chat_engine.process_normal_query(query, use_search=True)
-                        
-                        # Update panel with response content
-                        response_panel.renderable = Markdown(response)
-                        console.print(response_panel)
-                        
-                        # Add assistant message to session
-                        self.current_session.add_message("assistant", response)
-                    else:
-                        console.print("[error]Please provide a search query[/error]")
+            # Process commands
+            if user_input.lower() in ['quit', 'exit']:
+                # Ask if user wants to save before quitting
+                if len(self.current_session.messages) > 1:
+                    save_confirm = Prompt.ask(
+                        "[warning]Save this session before quitting? (y/n)[/warning]",
+                        choices=["y", "n"], default="y"
+                    )
+                    if save_confirm.lower() == 'y':
+                        self.save_current_session()
                 
-                elif user_input.lower() == 'save':
-                    self.save_current_session()
+                console.print("[warning]Goodbye![/warning]")
+                break
                 
-                elif user_input.lower().startswith('load '):
-                    session_id = user_input[5:].strip()
-                    self.load_session(session_id)
+            elif user_input.lower() == 'clear':
+                self.clear_screen()
                 
-                elif user_input.lower() == 'sessions':
-                    self.list_sessions()
+            elif user_input.lower() == 'help':
+                self.show_help()
                 
-                elif user_input.lower().startswith('theme '):
-                    theme_name = user_input[6:].strip()
-                    self.change_theme(theme_name)
+            elif user_input.lower() == 'keyboard':
+                self.show_keyboard_shortcuts()
                 
-                elif user_input.lower().startswith('export '):
-                    filename = user_input[7:].strip()
-                    self.export_conversation(filename)
-                elif user_input.lower() == 'history':
-                    self.show_history()    
+            elif user_input.lower() == 'switch':
+                console.print("[warning]Switching to security mode...[/warning]")
+                return "security"
+                
+            elif user_input.lower().startswith('search '):
+                query = user_input[7:].strip()  # Remove 'search ' prefix
+                if query:
+                    response_panel = Panel(
+                        "",
+                        title=f"[{self.current_theme['assistant_color']}]Assistant[/{self.current_theme['assistant_color']}]",
+                        border_style=self.current_theme['assistant_color'],
+                        expand=False
+                    )
+                    console.print("\n")
+                    console.print(response_panel)
                     
+                    with console.status(f"[success]Searching for information...[/success]"):
+                        response = self.chat_engine.process_normal_query(query, use_search=True)
+                    
+                    # Update panel with response content
+                    response_panel.renderable = Markdown(response)
+                    console.print(response_panel)
+                    
+                    # Add assistant message to session
+                    self.current_session.add_message("assistant", response)
+                else:
+                    console.print("[error]Please provide a search query[/error]")
+            
+            elif user_input.lower() == 'save':
+                self.save_current_session()
+            
+            elif user_input.lower().startswith('load '):
+                session_id = user_input[5:].strip()
+                self.load_session(session_id)
+            
+            elif user_input.lower() == 'sessions':
+                self.list_sessions()
+            
+            elif user_input.lower().startswith('theme '):
+                theme_name = user_input[6:].strip()
+                self.change_theme(theme_name)
+            
+            elif user_input.lower().startswith('export '):
+                filename = user_input[7:].strip()
+                self.export_conversation(filename)
+            
+            elif user_input.lower() == 'history':
+                self.show_history()
+            
+            else:
+                # Check if it's a real-time query
+                if self.realtime_engine.is_realtime_query(user_input):
+                    console.print("[bold cyan]🛰️ Real-Time Query Detected[/bold cyan]")
+                    response_panel = Panel(
+                        "",
+                        title=f"[{self.current_theme['assistant_color']}]Assistant[/{self.current_theme['assistant_color']}]",
+                        border_style=self.current_theme['assistant_color'],
+                        expand=False
+                    )
+                    console.print("\n")
+                    console.print(response_panel)
+                    
+                    with console.status(f"[success]Fetching real-time data...[/success]"):
+                        response = self.realtime_engine.process_realtime_query(user_input, mode="normal")
+                    
+                    # Update panel with response content
+                    response_panel.renderable = Markdown(response)
+                    console.print(response_panel)
+                    
+                    # Add assistant message to session
+                    self.current_session.add_message("assistant", response)
                 else:
                     # Regular query processing
                     response_panel = Panel(
@@ -489,11 +537,11 @@ class NormalMode:
                             error_message = f"Error processing query: {str(e)}"
                             response_panel.renderable = Text(error_message, style="bold red")
                             console.print(response_panel)
-                    
-            except KeyboardInterrupt:
-                console.print("\n[warning]Use 'quit' to exit properly[/warning]")
-            except Exception as e:
-                console.print(f"[error]Error:[/error] {str(e)}")
-                console.print("[info]Type [command]help[/command] for available commands[/info]")
-        
-        return "quit"
+                
+        except KeyboardInterrupt:
+            console.print("\n[warning]Use 'quit' to exit properly[/warning]")
+        except Exception as e:
+            console.print(f"[error]Error:[/error] {str(e)}")
+            console.print("[info]Type [command]help[/command] for available commands[/info]")
+    
+      return "quit"
