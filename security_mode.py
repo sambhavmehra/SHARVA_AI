@@ -21,6 +21,8 @@ from session import Session
 from session_name import Session
 from osint import PersonOSINT 
 from realtime_engine import RealTimeEngine
+from networksccanner import NetworkScanner
+
 console = Console()
 
 class SecurityMode:
@@ -149,7 +151,43 @@ class SecurityMode:
             return result
         
                 
-            
+    def network_scan(self):
+      """Run network scanner (defensive mode only)."""
+      if self.security_mode != "defensive":
+        console.print("[bold red][!] ERROR:[/bold red] Network scan is only available in [bold cyan]defensive[/bold cyan] mode.")
+        return
+
+      console.print(Panel.fit("[bold cyan]🌐 NETWORK SCANNER ACTIVATED 🌐[/bold cyan]", style="cyan"))
+    
+      target = Prompt.ask("[bold green]>[/bold green] Enter target network/IP (leave blank to auto-detect)", default="")
+      port_range = Prompt.ask("[bold green]>[/bold green] Port range (e.g., 1-1000)", default="1-1024")
+      threads = Prompt.ask("[bold green]>[/bold green] Number of threads", default="10")
+      timeout = Prompt.ask("[bold green]>[/bold green] Timeout (seconds)", default="2")
+
+      try:
+        scanner = NetworkScanner(
+            target=target if target.strip() else None,
+            port_range=port_range,
+            threads=int(threads),
+            timeout=int(timeout)
+        )
+        
+        scanner.discover_network()
+        scanner.scan_devices()
+        results = scanner.scan_all_devices()
+
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"Data/ScanReports/network_scan_{now}.json"
+        os.makedirs("Data/ScanReports", exist_ok=True)
+        
+        import json
+        with open(filename, "w") as f:
+            json.dump(results, f, indent=4)
+
+        console.print(f"[bold green]✓ Scan results saved to:[/bold green] {filename}")
+      except Exception as e:
+        console.print(f"[bold red][!] Error during scan:[/bold red] {e}")
+       
 
     def show_help(self):
         """Display enhanced security help with command categories."""
@@ -183,6 +221,8 @@ class SecurityMode:
         commands_table.add_row("static_code_analysis", "Perform static code analysis", "STD+")
         commands_table.add_row("threat_hunt <log_file>", "Search for threats in log files", "STD+")
         commands_table.add_row("malware_analysis <file>", "Analyze potential malware samples", "ADV+")
+        commands_table.add_row("network_scan", "Run network and port scanner", "STD+")
+
         
         # Offensive commands
         if self.security_mode == "offensive":
@@ -1340,6 +1380,8 @@ class SecurityMode:
 
             elif cmd.lower() == 'sessions':
                 self.list_sessions()
+            elif cmd.lower() == 'network_scan':
+                self.network_scan()    
 
             elif cmd.lower() == 'clear':
                 self.clear_screen()
