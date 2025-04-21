@@ -22,7 +22,7 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import clear as pt_clear
 from prompt_toolkit.key_binding import KeyBindings
 from config import Config
-from session_name import Session as NamedSession
+
 from realtime_engine import RealTimeEngine
 from chat_engine import ChatEngine
 # Define custom theme
@@ -46,11 +46,6 @@ class Message:
         self.content = content
         self.timestamp = timestamp or datetime.now()
        
-        
-      
-    # Initialize RealTimeEngine
-     
-    
     def to_dict(self) -> Dict:
         """Convert message to dictionary for serialization."""
         return {
@@ -75,6 +70,7 @@ class Session:
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.messages: List[Message] = []
         self.session_dir = os.path.join(os.path.expanduser("~"), ".normal_advisor", "sessions")
+        self.topic = ""
     
     def add_message(self, sender: str, content: str) -> None:
         """Add a message to the session."""
@@ -87,6 +83,7 @@ class Session:
         session_data = {
             "session_id": self.session_id,
             "messages": [msg.to_dict() for msg in self.messages],
+            "topic": self.topic,
             "last_updated": datetime.now().isoformat()
         }
         
@@ -99,11 +96,14 @@ class Session:
         session = cls(session_id)
         session_file = os.path.join(session.session_dir, f"{session_id}.json")
         
-        if os.path.exists(session_file):
-            with open(session_file, "r") as f:
-                data = json.load(f)
-            
-            session.messages = [Message.from_dict(msg) for msg in data["messages"]]
+        if not os.path.exists(session_file):
+            raise FileNotFoundError(f"Session file not found: {session_file}")
+        
+        with open(session_file, "r") as f:
+            data = json.load(f)
+        
+        session.messages = [Message.from_dict(msg) for msg in data["messages"]]
+        session.topic = data.get("topic", "")
         
         return session
     
@@ -116,13 +116,17 @@ class Session:
         sessions = []
         for file in os.listdir(session_dir):
             if file.endswith(".json"):
-                with open(os.path.join(session_dir, file), "r") as f:
-                    data = json.load(f)
-                sessions.append({
-                    "session_id": data["session_id"],
-                    "last_updated": datetime.fromisoformat(data["last_updated"]),
-                    "message_count": len(data["messages"])
-                })
+                try:
+                    with open(os.path.join(session_dir, file), "r") as f:
+                        data = json.load(f)
+                    sessions.append({
+                        "session_id": data["session_id"],
+                        "topic": data.get("topic", "Untitled"),
+                        "last_updated": datetime.fromisoformat(data["last_updated"]),
+                        "message_count": len(data["messages"])
+                    })
+                except (json.JSONDecodeError, KeyError) as e:
+                    console.print(f"[error]Error reading session file {file}: {str(e)}[/error]")
         
         return sorted(sessions, key=lambda x: x["last_updated"], reverse=True)
 
@@ -138,9 +142,9 @@ class NormalMode:
         self.realtime_engine = RealTimeEngine(self.chat_engine)
         # Create command completer
         self.commands = [
-    "quit", "exit", "clear", "help", "switch", "search",
-    "save", "load", "sessions", "theme", "keyboard", "export", "history"
-]
+            "quit", "exit", "clear", "help", "switch", "search",
+            "save", "load", "sessions", "theme", "keyboard", "export", "history"
+        ]
         self.completer = WordCompleter(self.commands)
         
         # Setup prompt session with history
@@ -192,10 +196,6 @@ class NormalMode:
             }
         }
         self.current_theme = self.available_themes["default"]
-    def show_history(self) -> None:
-      """Display all saved sessions with their topics and modes."""
-      NamedSession.display_history()
-
 
     def display_banner(self):
        """Display an enhanced normal mode banner for SHARVA with selective color styling."""
@@ -204,7 +204,7 @@ class NormalMode:
        reset = "\033[0m"  # ANSI reset code
        console.clear()
 
-    # Get current terminal width for centering
+       # Get current terminal width for centering
        width = shutil.get_terminal_size().columns
 
        banner_art = r"""
@@ -218,7 +218,7 @@ class NormalMode:
           Developed by Sambhav Mehra
     """
 
-    # Center each line based on the terminal width
+       # Center each line based on the terminal width
        centered_banner = "\n".join(line.center(width) for line in banner_art.strip("\n").splitlines())
 
        console.print(
@@ -236,9 +236,6 @@ class NormalMode:
         )
     )
 
-
-
-    
     def show_help(self):
         """Display help information for normal mode."""
         help_text = """
@@ -248,7 +245,7 @@ class NormalMode:
         - `clear`: Clear the screen (or use Ctrl+L)
         - `help`: Show this help menu
         - `switch`: Switch to security mode
-        -`history': History of previous sessions
+        - `history`: History of previous commands
         
         ## Search & Conversation
         
@@ -260,7 +257,6 @@ class NormalMode:
         - `load <session_id>`: Load a previous session
         - `sessions`: List all saved sessions
         - `export <filename>`: Export conversation to file
-        
         
         ## Customization
         
@@ -281,7 +277,7 @@ class NormalMode:
             border_style=self.current_theme['banner_color'],
             box=box.ROUNDED
         ))
-    # Add this inside NormalMode class in normal_mode.py
+
     def handle_user_query(self, query: str):
       """Process user query, including real-time handling."""
       if self.realtime_engine.is_realtime_query(query):
@@ -292,12 +288,11 @@ class NormalMode:
         console.print(Markdown(response))
         return
 
-    # Fallback to normal AI processing
+      # Fallback to normal AI processing
       response = self.chat_engine.process_normal_query(query)
       self.current_session.add_message("user", query)
       self.current_session.add_message("assistant", response)
       console.print(Markdown(response))
-
 
     def show_keyboard_shortcuts(self):
         """Display keyboard shortcuts."""
@@ -340,20 +335,25 @@ class NormalMode:
             console.print(f"[success]Loaded session: {session_id}[/success]")
             
             # Display loaded messages
-            console.print(Panel(
-                "Session loaded successfully. Displaying previous messages:",
-                title=f"[{self.current_theme['highlight_color']}]Session History[/{self.current_theme['highlight_color']}]",
-                border_style=self.current_theme['highlight_color']
-            ))
-            
-            for msg in self.current_session.messages:
-                if msg.sender == "user":
-                    console.print(f"\n[{self.current_theme['user_color']}]You ({msg.timestamp.strftime('%H:%M:%S')})[/{self.current_theme['user_color']}]")
-                    console.print(Panel(msg.content, border_style=self.current_theme['user_color']))
-                else:
-                    console.print(f"\n[{self.current_theme['assistant_color']}]Assistant ({msg.timestamp.strftime('%H:%M:%S')})[/{self.current_theme['assistant_color']}]")
-                    console.print(Panel(Markdown(msg.content), border_style=self.current_theme['assistant_color']))
-            
+            if self.current_session.messages:
+                console.print(Panel(
+                    "Session loaded successfully. Displaying previous messages:",
+                    title=f"[{self.current_theme['highlight_color']}]Session History[/{self.current_theme['highlight_color']}]",
+                    border_style=self.current_theme['highlight_color']
+                ))
+                
+                for msg in self.current_session.messages:
+                    if msg.sender == "user":
+                        console.print(f"\n[{self.current_theme['user_color']}]You ({msg.timestamp.strftime('%H:%M:%S')})[/{self.current_theme['user_color']}]")
+                        console.print(Panel(msg.content, border_style=self.current_theme['user_color']))
+                    else:
+                        console.print(f"\n[{self.current_theme['assistant_color']}]Assistant ({msg.timestamp.strftime('%H:%M:%S')})[/{self.current_theme['assistant_color']}]")
+                        console.print(Panel(Markdown(msg.content), border_style=self.current_theme['assistant_color']))
+            else:
+                console.print("[warning]Session loaded but contains no messages[/warning]")
+                
+        except FileNotFoundError:
+            console.print(f"[error]Session not found: {session_id}[/error]")
         except Exception as e:
             console.print(f"[error]Error loading session: {str(e)}[/error]")
     
@@ -367,12 +367,14 @@ class NormalMode:
         
         table = Table(title="Saved Sessions", box=box.SIMPLE)
         table.add_column("Session ID", style="cyan")
+        table.add_column("Topic", style="yellow")
         table.add_column("Last Updated", style="green")
-        table.add_column("Messages", style="yellow")
+        table.add_column("Messages", style="magenta")
         
         for session in sessions:
             table.add_row(
                 session["session_id"],
+                session["topic"],
                 session["last_updated"].strftime("%Y-%m-%d %H:%M:%S"),
                 str(session["message_count"])
             )
@@ -400,6 +402,35 @@ class NormalMode:
         except Exception as e:
             console.print(f"[error]Error exporting conversation: {str(e)}[/error]")
     
+    def show_history(self):
+        """Display command history."""
+        try:
+            history_file = os.path.join(os.path.expanduser("~"), ".normal_advisor", "history")
+            if not os.path.exists(history_file):
+                console.print("[info]No command history found.[/info]")
+                return
+                
+            with open(history_file, 'r') as f:
+                history_lines = f.readlines()
+            
+            if not history_lines:
+                console.print("[info]Command history is empty.[/info]")
+                return
+                
+            # Create a table for command history
+            table = Table(title="Command History", box=box.SIMPLE)
+            table.add_column("#", style="cyan")
+            table.add_column("Command", style="green")
+            
+            # Display up to the last 20 commands
+            for i, line in enumerate(history_lines[-20:], 1):
+                table.add_row(str(i), line.strip())
+            
+            console.print(table)
+            
+        except Exception as e:
+            console.print(f"[error]Error displaying history: {str(e)}[/error]")
+    
     def run(self):
       """Run the normal mode interface."""
       self.clear_screen()
@@ -414,6 +445,10 @@ class NormalMode:
                 mouse_support=True
             )
             
+            # Skip empty input
+            if not user_input.strip():
+                continue
+                
             # Add user message to session
             self.current_session.add_message("user", user_input)
             if len(self.current_session.messages) == 1:
