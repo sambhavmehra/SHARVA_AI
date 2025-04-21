@@ -65,7 +65,7 @@ class RealTimeEngine:
             
             # Ethical hacking patterns
             r"(penetration|pen)\s+testing\s+(tool|technique|methodology)",
-            r"(recent|new|latest)\s+(hack|breach|exploit|attack|vulnerability)",
+            r"(recent|new|latest)\s+(breach|exploit|attack|vulnerability)",
             r"(security|vulnerability)\s+assessment",
             r"(bug|vulnerability)\s+bounty\s+(program|update|news)",
             r"(current|best|top)\s+(cybersecurity|infosec|hacking)\s+(tool|framework|practice|methodology)",
@@ -157,26 +157,38 @@ class RealTimeEngine:
         }
 
     def is_realtime_query(self, query: str) -> bool:
-        """Determine if the query requires real-time data with enhanced pattern matching."""
-        query = query.lower().strip()
-        
-        category = self.identify_query_category(query)
-        if category == "hacking":
-          return True
-        # Check against patterns
-        for pattern in self.realtime_patterns:
-            if re.search(pattern, query):
-                return True
-                
-        # Check for time-sensitive keywords
-        time_keywords = ["now", "today", "current", "latest", "live", "recent", "update", "hacking"]
-        query_words = query.split()
-        
-        for keyword in time_keywords:
-            if keyword in query_words:
-                return True
-                
+      """Determine if the query requires real-time data with enhanced pattern matching."""
+      query = query.lower().strip()
+
+    # Exclude commands that should not be treated as real-time queries
+      excluded_commands = [
+        "run_hackbot", "osint", "network_scan", "recon", "pentest_report",
+        "exploit_analysis", "payload_gen", "show_help", "show_stats"
+    ]
+      if query in excluded_commands:
         return False
+
+    # Identify query category first
+      category = self.identify_query_category(query)
+      if category == "hacking":
+        return True
+
+    # Check against real-time regex patterns
+      for pattern in self.realtime_patterns:
+        if re.search(pattern, query):
+            return True
+
+    # Check for time-sensitive keywords
+      time_keywords = [
+        "now", "today", "current", "latest", "live", "recent", "update", "hacking"
+    ]
+      query_words = query.split()
+      for keyword in time_keywords:
+        if keyword in query_words:
+            return True
+
+      return False
+
     
     def identify_query_category(self, query: str) -> str:
         """Identify the category of the real-time query."""
