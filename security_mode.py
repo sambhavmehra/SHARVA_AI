@@ -627,6 +627,10 @@ class SecurityMode:
     def process_security_query(self, query):
         """Process security query with enhanced feedback."""
         self.query_count += 1
+        if query.strip().lower() == "run_hackbot":
+          self.run_hackbot()
+          return
+
         if self.realtime_engine.is_realtime_query(query):
           console.print("[bold cyan]🛰️ Real-Time Query Detected in Security Mode[/bold cyan]")
           response = self.realtime_engine.process_realtime_query(query, mode="security")
@@ -1249,45 +1253,37 @@ class SecurityMode:
       console.print("\n[bold yellow]WARNING: This payload is for authorized security testing only.[/bold yellow]")
         
     def run_hackbot(self):
-        """Run HackBot in offensive security mode."""
-        if self.security_mode != "offensive":
-            console.print("[bold red]Error: HackBot only available in offensive mode[/bold red]")
-            console.print("[yellow]Switch to offensive mode first with: set_mode offensive[/yellow]")
-            return
-        if self.auth_level not in ["government", "certified"]:
-            console.print("[bold red]Error: Insufficient authorization level[/bold red]")
-            console.print("[yellow]Elevate auth level with 'set_auth government' or 'set_auth certified'[/yellow]")
-            return  
+      """Launch HackBot AI Assistant from within Security Mode."""
+      if self.security_mode != "offensive":
+        console.print("[bold red][!] Access Denied:[/bold red] This feature is only available in [bold yellow]offensive mode[/bold yellow].")
+        return
 
+      if self.auth_level != "government":
+        console.print("[bold red][!] Authorization Error:[/bold red] You must have [bold yellow]government[/bold yellow] level authorization to run HackBot.")
+        return
 
-        try:    
-            if self.hackbot is None:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]Initializing HackBot..."),
-                   transient=True
-                   ) as progress:
-                    progress.add_task("init", total=None)
-                    self.hackbot = HackBot(config_file="hackbot_config.json")  # Use a dedicated config
-            console.print("\n[bold red]╔══════════════════════════════════════════════════╗[/bold red]")
-            console.print("[bold red]║[/bold red] [bold white]HACKBOT RUNNING IN OFFENSIVE SECURITY MODE[/bold white] [bold red]║[/bold red]")
-            console.print("[bold red]╚══════════════════════════════════════════════════╝[/bold red]")
-            original_banner = self.hackbot.show_banner
-            def offensive_banner():
-                console.print("\n[bold red]OFFENSIVE SECURITY MODE ACTIVE[/bold red]")
-                console.print("[yellow]All activities are logged and monitored[/yellow]\n")
-                original_banner()
-            self.hackbot.show_banner = offensive_banner
-            self.hackbot.run()
-            self.hackbot.show_banner = original_banner
-            console.print("[bold green]HackBot session finished successfully.[/bold green]")    
-        except KeyboardInterrupt:
-            console.print("\n[bold yellow]HackBot session interrupted by user.[/bold yellow]")   
+      if not self.hackbot:
+        try:
+            from hackbot import HackBot
+            self.hackbot = HackBot()
         except Exception as e:
-             console.print(f"[bold red]Failed to run HackBot: {str(e)}[/bold red]")
-             self.hackbot = None
-        finally: 
-            self.hackbot = None   
+            console.print(f"[bold red][!] Failed to initialize HackBot:[/bold red] {e}")
+            return
+
+      console.print(Panel.fit(
+        "[bold cyan]🧠 HackBot AI Assistant Initializing...[/bold cyan]\n"
+        "[white]Launching interactive terminal for cybersecurity automation.[/white]",
+        title="[bold magenta]HACKBOT LAUNCHER[/bold magenta]",
+        border_style="cyan"
+    ))
+
+      try:
+        self.hackbot.run()  # ← this is the correct method
+      except Exception as e:
+        console.print(f"[bold red]⚠ HackBot terminated unexpectedly:[/bold red] {e}")
+
+    
+          
     def enable_offensive_capabilities(self):
         """Forcefully enable offensive mode with elevated auth and expert level."""
         self.set_security_mode("offensive")
